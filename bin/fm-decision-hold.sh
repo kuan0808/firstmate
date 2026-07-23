@@ -20,8 +20,8 @@
 # active record first and falls back to the configured or default Done archive.
 # Active records therefore shadow archive history, while every hold, dependency,
 # update, unblock, and close mutation remains active-backlog-only.
-# A true inclusive NOT_FOUND is treated as absence, but a missing archive flag or
-# malformed lookup result reports the required archive-aware tasks-axi contract.
+# Only exit 1 with the canonical three-line NOT_FOUND envelope is treated as
+# absence; every other failure reports the required archive-aware contract.
 #
 # Usage:
 #   fm-decision-hold.sh id <origin-id> <decision-key>
@@ -136,7 +136,7 @@ output_field_count() {  # <show-output> <field>
 }
 
 task_show_durable() {  # <id>; sets TASK_SHOW_DURABLE_OUTPUT; 1 means true absence
-  local id=$1 output source shown_id field
+  local id=$1 output source shown_id field status expected
   TASK_SHOW_DURABLE_OUTPUT=''
   require_archive_lookup
   if output=$(tasks_axi show "$id" --include-archive --full 2>&1); then
@@ -155,9 +155,11 @@ task_show_durable() {  # <id>; sets TASK_SHOW_DURABLE_OUTPUT; 1 means true absen
     esac
     TASK_SHOW_DURABLE_OUTPUT=$output
     return 0
+  else
+    status=$?
   fi
-  if [ "$(output_line_count "$output" 'code: NOT_FOUND')" = 1 ] \
-    && [ "$(output_line_count "$output" task:)" = 0 ]; then
+  expected=$(printf 'error: "Task \\"%s\\" not found in this backlog"\ncode: NOT_FOUND\nhelp[1]: Run \140tasks-axi list\140 to see existing tasks' "$id")
+  if [ "$status" = 1 ] && [ "$output" = "$expected" ]; then
     return 1
   fi
   fail "tasks-axi show <id> --include-archive --full failed incompatibly for $id"

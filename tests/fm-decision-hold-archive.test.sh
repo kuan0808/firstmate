@@ -13,7 +13,7 @@ TASKS_AXI_BIN=$(command -v tasks-axi || true)
 
 make_home() {  # <name> [archive-path|default]
   local archive=${2:-data/done-archive.md} home="$TMP_ROOT/$1" fakebin
-  mkdir -p "$home/data" "$home/state" "$home/config" "$home/projects"
+  mkdir -p "$home/data" "$home/state" "$home/config" "$home/projects" "$home/user-home"
   if [ "$archive" = default ]; then
     cat > "$home/.tasks.toml" <<'EOF'
 backend = "markdown"
@@ -48,15 +48,22 @@ EOF
 tasks_in() {  # <home> <tasks-axi args...>
   local home=$1
   shift
-  (cd "$home" && "$TASKS_AXI_BIN" "$@")
+  (
+    unset TASKS_AXI_FILE TASKS_AXI_BACKEND
+    cd "$home" || exit 1
+    HOME="$home/user-home" "$TASKS_AXI_BIN" "$@"
+  )
 }
 
 run_decisions() {  # <home> <command args...>
   local home=$1
   shift
-  PATH="$home/fakebin:$PATH" REAL_TASKS_AXI="$TASKS_AXI_BIN" \
-    FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
-    FM_CONFIG_OVERRIDE="$home/config" "$ROOT/bin/fm-decision-hold.sh" "$@"
+  (
+    unset TASKS_AXI_FILE TASKS_AXI_BACKEND
+    PATH="$home/fakebin:$PATH" REAL_TASKS_AXI="$TASKS_AXI_BIN" HOME="$home/user-home" \
+      FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+      FM_CONFIG_OVERRIDE="$home/config" "$ROOT/bin/fm-decision-hold.sh" "$@"
+  )
 }
 
 write_origin_meta() {  # <home> <origin> <keys>
@@ -118,6 +125,58 @@ test_live_pin_exposes_archive_contract() {
   expect_code 1 "$ordinary_rc" "ordinary show must remain active-only"
   assert_grep "code: NOT_FOUND" "$home/ordinary.out" "ordinary archive miss lost NOT_FOUND"
   pass "active local tasks-axi pin exposes the privacy-safe archive lookup contract"
+}
+
+test_real_binary_helpers_ignore_ambient_configuration() {
+  local home ambient origin id env_before home_before
+  home=$(make_home ambient-config default)
+  ambient="$TMP_ROOT/operator-config"
+  origin=sample-ambient-review
+  id="$origin-decision-route"
+  mkdir -p "$ambient/user-home/.tasks-axi"
+  cat > "$ambient/user-home/.tasks-axi/config.toml" <<EOF
+backend = "markdown"
+
+[markdown]
+path = "$ambient/home-backlog.md"
+archive = "$ambient/home-archive.md"
+done_keep = 10
+EOF
+  cat > "$ambient/home-backlog.md" <<'EOF'
+## In flight
+
+## Queued
+
+## Done
+EOF
+  cp "$ambient/home-backlog.md" "$ambient/env-backlog.md"
+  env_before=$(file_digest "$ambient/env-backlog.md")
+  home_before=$(file_digest "$ambient/home-backlog.md")
+  write_origin_meta "$home" "$origin" route
+
+  HOME="$ambient/user-home" create_resolved "$home" "$id"
+  HOME="$ambient/user-home" archive_all_done "$home"
+  assert_present "$home/data/done-archive.md" "disposable HOME lost the default archive"
+  assert_absent "$ambient/home-archive.md" "ambient HOME redirected the Done archive"
+
+  HOME="$ambient/user-home" TASKS_AXI_FILE="$ambient/env-backlog.md" \
+    TASKS_AXI_BACKEND=unsupported tasks_in "$home" add ambient-direct \
+    "Synthetic direct fixture" --kind ship --repo sample >/dev/null \
+    || fail "tasks_in inherited ambient tasks-axi overrides"
+  HOME="$ambient/user-home" TASKS_AXI_FILE="$ambient/env-backlog.md" \
+    TASKS_AXI_BACKEND=unsupported run_decisions "$home" hold "$origin" layout \
+    --title "Choose ambient-safe layout" --reason "captain layout pending" \
+    --repo sample >/dev/null \
+    || fail "run_decisions inherited ambient tasks-axi overrides"
+
+  assert_grep "ambient-direct" "$home/data/backlog.md" "direct fixture missed its isolated backlog"
+  assert_grep "$origin-decision-layout" "$home/data/backlog.md" \
+    "decision fixture missed its isolated backlog"
+  [ "$env_before" = "$(file_digest "$ambient/env-backlog.md")" ] \
+    || fail "ambient TASKS_AXI_FILE backlog was mutated"
+  [ "$home_before" = "$(file_digest "$ambient/home-backlog.md")" ] \
+    || fail "ambient HOME backlog was mutated"
+  pass "real-binary helpers isolate HOME and tasks-axi overrides"
 }
 
 test_active_hit_does_not_read_archive() {
@@ -275,7 +334,64 @@ EOF
   pass "malformed tasks-axi archive output is distinct from absence"
 }
 
+test_code_only_not_found_refuses_hold_creation() {
+  local home origin id before
+  home=$(make_home code-only-not-found default)
+  origin=sample-code-only-review
+  id="$origin-decision-route"
+  write_origin_meta "$home" "$origin" route
+  cat > "$home/fakebin/tasks-axi" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = show ] && [ "${3:-}" = --include-archive ] && [ "${4:-}" = --full ]; then
+  printf 'code: NOT_FOUND\n'
+  exit 1
+fi
+exec "$REAL_TASKS_AXI" "$@"
+EOF
+  chmod +x "$home/fakebin/tasks-axi"
+  before=$(file_digest "$home/data/backlog.md")
+  if run_decisions "$home" hold "$origin" route --title "Choose synthetic route" \
+    --reason "captain route pending" --repo sample > "$home/hold.out" 2> "$home/hold.err"; then
+    fail "code-only NOT_FOUND envelope allowed hold creation"
+  fi
+  assert_grep "failed incompatibly for $id" "$home/hold.err" \
+    "code-only NOT_FOUND envelope lost its integration error"
+  [ "$before" = "$(file_digest "$home/data/backlog.md")" ] \
+    || fail "code-only NOT_FOUND envelope created an active duplicate"
+  pass "code-only NOT_FOUND envelope refuses hold creation"
+}
+
+test_wrong_status_not_found_refuses_hold_creation() {
+  local home origin id before
+  home=$(make_home wrong-status-not-found default)
+  origin=sample-wrong-status-review
+  id="$origin-decision-route"
+  write_origin_meta "$home" "$origin" route
+  cat > "$home/fakebin/tasks-axi" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = show ] && [ "${3:-}" = --include-archive ] && [ "${4:-}" = --full ]; then
+  printf 'error: "Task \\"%s\\" not found in this backlog"\n' "${2:-}"
+  printf 'code: NOT_FOUND\n'
+  printf 'help[1]: Run `tasks-axi list` to see existing tasks\n'
+  exit 2
+fi
+exec "$REAL_TASKS_AXI" "$@"
+EOF
+  chmod +x "$home/fakebin/tasks-axi"
+  before=$(file_digest "$home/data/backlog.md")
+  if run_decisions "$home" hold "$origin" route --title "Choose synthetic route" \
+    --reason "captain route pending" --repo sample > "$home/hold.out" 2> "$home/hold.err"; then
+    fail "wrong-status NOT_FOUND envelope allowed hold creation"
+  fi
+  assert_grep "failed incompatibly for $id" "$home/hold.err" \
+    "wrong-status NOT_FOUND envelope lost its integration error"
+  [ "$before" = "$(file_digest "$home/data/backlog.md")" ] \
+    || fail "wrong-status NOT_FOUND envelope created an active duplicate"
+  pass "wrong-status NOT_FOUND envelope refuses hold creation"
+}
+
 test_live_pin_exposes_archive_contract
+test_real_binary_helpers_ignore_ambient_configuration
 test_active_hit_does_not_read_archive
 test_default_archive_fallback_and_active_only_mutation
 test_configured_archive_path
@@ -283,3 +399,5 @@ test_active_shadow_blocks_archive_resolution
 test_true_miss_remains_absent
 test_missing_capability_is_not_reported_as_absence
 test_malformed_tool_output_is_not_reported_as_absence
+test_code_only_not_found_refuses_hold_creation
+test_wrong_status_not_found_refuses_hold_creation
