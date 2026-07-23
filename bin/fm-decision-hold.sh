@@ -146,7 +146,7 @@ task_show_durable() {  # <id>; sets TASK_SHOW_DURABLE_OUTPUT; 1 means true absen
     if [ "$(output_line_count "$output" task:)" != 1 ] || [ "$shown_id" != "$id" ]; then
       fail "tasks-axi show <id> --include-archive --full returned malformed output for $id"
     fi
-    for field in id source state held kind hold_kind body; do
+    for field in id source title state held kind hold_kind body; do
       [ "$(output_field_count "$output" "$field")" = 1 ] \
         || fail "tasks-axi show <id> --include-archive --full returned malformed output for $id"
     done

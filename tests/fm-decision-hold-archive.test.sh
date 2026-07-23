@@ -334,6 +334,43 @@ EOF
   pass "malformed tasks-axi archive output is distinct from absence"
 }
 
+test_duplicate_title_output_refuses_hold_mutation() {
+  local home origin id before
+  home=$(make_home duplicate-title default)
+  origin=sample-duplicate-title-review
+  id="$origin-decision-route"
+  write_origin_meta "$home" "$origin" route
+  tasks_in "$home" add "$id" "Choose synthetic route" --kind captain --repo sample >/dev/null \
+    || fail "could not create active decision fixture"
+  cat > "$home/fakebin/tasks-axi" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = show ] && [ "\${2:-}" = "$id" ] && [ "\${3:-}" = --include-archive ] && [ "\${4:-}" = --full ]; then
+  "\$REAL_TASKS_AXI" "\$@"
+  status=\$?
+  [ "\$status" -eq 0 ] || exit "\$status"
+  printf '  title: Duplicate synthetic title\n'
+  exit 0
+fi
+if [ "\${1:-}" = hold ] && [ "\${2:-}" = "$id" ]; then
+  printf '%s\n' "\$*" >> "$home/hold-invocations"
+fi
+exec "\$REAL_TASKS_AXI" "\$@"
+EOF
+  chmod +x "$home/fakebin/tasks-axi"
+  before=$(file_digest "$home/data/backlog.md")
+  if run_decisions "$home" hold "$origin" route --title "Choose synthetic route" \
+    --reason "captain route pending" --repo sample > "$home/hold.out" 2> "$home/hold.err"; then
+    fail "duplicate title output allowed hold mutation"
+  fi
+  assert_grep "returned malformed output for $id" "$home/hold.err" \
+    "duplicate title output did not report malformed archive lookup"
+  assert_absent "$home/hold-invocations" \
+    "duplicate title output reached the active hold mutation"
+  [ "$before" = "$(file_digest "$home/data/backlog.md")" ] \
+    || fail "duplicate title output changed the active backlog"
+  pass "duplicate title output refuses active hold mutation"
+}
+
 test_code_only_not_found_refuses_hold_creation() {
   local home origin id before
   home=$(make_home code-only-not-found default)
@@ -399,5 +436,6 @@ test_active_shadow_blocks_archive_resolution
 test_true_miss_remains_absent
 test_missing_capability_is_not_reported_as_absence
 test_malformed_tool_output_is_not_reported_as_absence
+test_duplicate_title_output_refuses_hold_mutation
 test_code_only_not_found_refuses_hold_creation
 test_wrong_status_not_found_refuses_hold_creation
