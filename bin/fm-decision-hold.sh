@@ -15,6 +15,13 @@
 # is idempotent. A different decision key creates a different backlog identity.
 # All backlog mutations run in the active FM_HOME, which keeps main-home and
 # secondmate-home ownership aligned with the work that discovered the decision.
+# Durable decision-identity reads use the explicit read-only
+# `tasks-axi show <id> --include-archive --full` contract, which selects the
+# active record first and falls back to the configured or default Done archive.
+# Active records therefore shadow archive history, while every hold, dependency,
+# update, unblock, and close mutation remains active-backlog-only.
+# A true inclusive NOT_FOUND is treated as absence, but a missing archive flag or
+# malformed lookup result reports the required archive-aware tasks-axi contract.
 #
 # Usage:
 #   fm-decision-hold.sh id <origin-id> <decision-key>
@@ -110,6 +117,52 @@ task_show() {  # <id>
   tasks_axi show "$1" --full 2>/dev/null
 }
 
+TASK_SHOW_DURABLE_OUTPUT=''
+
+require_archive_lookup() {
+  local help
+  help=$(tasks_axi show --help 2>&1) \
+    || fail "tasks-axi show <id> --include-archive --full is required for durable decision lookup"
+  printf '%s\n' "$help" | grep -F -- '--include-archive' >/dev/null \
+    || fail "tasks-axi show <id> --include-archive --full is required for durable decision lookup"
+}
+
+output_line_count() {  # <output> <exact-line>
+  printf '%s\n' "$1" | awk -v expected="$2" '$0 == expected { count++ } END { print count + 0 }'
+}
+
+output_field_count() {  # <show-output> <field>
+  printf '%s\n' "$1" | awk -v prefix="  $2: " 'index($0, prefix) == 1 { count++ } END { print count + 0 }'
+}
+
+task_show_durable() {  # <id>; sets TASK_SHOW_DURABLE_OUTPUT; 1 means true absence
+  local id=$1 output source shown_id field
+  TASK_SHOW_DURABLE_OUTPUT=''
+  require_archive_lookup
+  if output=$(tasks_axi show "$id" --include-archive --full 2>&1); then
+    shown_id=$(show_field "$output" id)
+    source=$(show_field "$output" source)
+    if [ "$(output_line_count "$output" task:)" != 1 ] || [ "$shown_id" != "$id" ]; then
+      fail "tasks-axi show <id> --include-archive --full returned malformed output for $id"
+    fi
+    for field in id source state held kind hold_kind body; do
+      [ "$(output_field_count "$output" "$field")" = 1 ] \
+        || fail "tasks-axi show <id> --include-archive --full returned malformed output for $id"
+    done
+    case "$source" in
+      active|archive) : ;;
+      *) fail "tasks-axi show <id> --include-archive --full returned malformed output for $id" ;;
+    esac
+    TASK_SHOW_DURABLE_OUTPUT=$output
+    return 0
+  fi
+  if [ "$(output_line_count "$output" 'code: NOT_FOUND')" = 1 ] \
+    && [ "$(output_line_count "$output" task:)" = 0 ]; then
+    return 1
+  fi
+  fail "tasks-axi show <id> --include-archive --full failed incompatibly for $id"
+}
+
 show_field() {  # <show-output> <field>
   local output=$1 field=$2
   printf '%s\n' "$output" | sed -n "s/^  $field: //p" | head -1
@@ -172,7 +225,8 @@ verify_hold_active() {  # <hold-id>
 
 verify_hold_resolved() {  # <hold-id>
   local id=$1 show state kind body
-  show=$(task_show "$id") || return 1
+  task_show_durable "$id" || return 1
+  show=$TASK_SHOW_DURABLE_OUTPUT
   state=$(show_field "$show" state)
   kind=$(show_field "$show" kind)
   body=$(show_field "$show" body)
@@ -186,7 +240,8 @@ verify_hold_resolved() {  # <hold-id>
 
 verify_hold_durable() {  # <hold-id>
   local id=$1 show state held kind hold_kind body
-  show=$(task_show "$id") || fail "captain decision $id is absent from $FM_HOME/data/backlog.md"
+  task_show_durable "$id" || fail "captain decision $id is absent from the active backlog and Done archive"
+  show=$TASK_SHOW_DURABLE_OUTPUT
   state=$(show_field "$show" state)
   held=$(show_field "$show" held)
   kind=$(show_field "$show" kind)
@@ -229,7 +284,7 @@ command_id() {
 }
 
 command_hold() {
-  local origin=${1:-} key=${2:-} title='' reason='' repo='' id show state kind existing_title body
+  local origin=${1:-} key=${2:-} title='' reason='' repo='' id show source state kind existing_title body
   [ "$#" -ge 2 ] || { usage >&2; exit 2; }
   shift 2
   while [ "$#" -gt 0 ]; do
@@ -249,10 +304,13 @@ command_hold() {
   require_tasks_axi
   origin_exists_here "$origin" || fail "origin $origin is not owned by the active home $FM_HOME"
   id=$(hold_id "$origin" "$key")
-  if show=$(task_show "$id"); then
+  if task_show_durable "$id"; then
+    show=$TASK_SHOW_DURABLE_OUTPUT
+    source=$(show_field "$show" source)
     state=$(show_field "$show" state)
     kind=$(show_field "$show" kind)
     existing_title=$(show_field "$show" title)
+    [ "$source" != archive ] || fail "captain decision $id is archived and cannot be mutated; use a new decision key for a new decision"
     [ "$state" != "done" ] || fail "captain decision $id is already durably resolved; use a new decision key for a new decision"
     [ "$kind" = captain ] || fail "existing backlog identity $id is not kind captain"
     [ "$existing_title" = "$title" ] || fail "existing captain hold $id has a different title"
@@ -394,7 +452,7 @@ command_resolve() {
   require_tasks_axi
   id=$(hold_id "$origin" "$key")
   if verify_hold_resolved "$id"; then
-    hold_show=$(task_show "$id")
+    hold_show=$TASK_SHOW_DURABLE_OUTPUT
     hold_body=$(show_field "$hold_show" body)
     verify_resolution_identity "$id" "$hold_body" "$decision_digest" "$routed_csv"
     printf 'resolved: %s\n' "$id"
