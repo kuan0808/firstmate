@@ -6,17 +6,19 @@ This document records the deterministic mechanism, structured surfaces, and priv
 ## Mechanism
 
 `bin/fm-decision-hold.sh` is the only lifecycle command for an investigation or visual review's unresolved captain decisions.
-The command runs tasks-axi in the active `FM_HOME`, so the existing backlog remains the only durable work database and a secondmate-owned decision stays in the secondmate home.
+The command runs tasks-axi in the active `FM_HOME`, so its backlog and Done archive remain the only durable work database and a secondmate-owned decision stays in the secondmate home.
 It never reads report bodies, review artifacts, terminal output, or chat.
+Durable decision-identity checks select the active backlog record first and use the configured or default Done archive only as a read-only fallback.
+An active record therefore remains canonical when the same identity also exists in archive history, while a missing archive-aware capability or malformed result remains an integration failure rather than apparent absence.
 
 The `hold` subcommand maps an originating work id and stable decision key to `<origin-id>-decision-<decision-key>`.
-It creates a kind `captain` backlog item when absent and invokes `tasks-axi hold <id> --reason <reason> --kind captain` on every retry.
-It rejects an identity collision, a changed title, and attempts to reopen an already resolved identity.
+It creates a kind `captain` backlog item only when the identity is absent from both active and archived history, and invokes `tasks-axi hold <id> --reason <reason> --kind captain` on each permitted active retry.
+It rejects an identity collision, a changed title, attempts to reopen an already resolved identity, and every mutation of an archived identity.
 
 The `complete` subcommand unions the reviewed keys into `decision_keys=` and appends `decisions_reviewed=1` while originating task metadata is live.
 A post-teardown visual review can complete against the surviving report and durable holds without recreating volatile task metadata.
 It accepts `--none` as an explicit semantic inventory result, not as inferred absence.
-It verifies every listed identity against tasks-axi before recording completion.
+It verifies every listed identity through the active-first durable lookup before recording completion.
 For an open keyed status decision, it appends a `captain-held [key=<key>]: ...` transfer event only after the matching backlog hold is durable.
 `bin/fm-classify-lib.sh` recognizes that transfer as closing the live status copy without claiming that the captain has answered it.
 
@@ -25,7 +27,7 @@ The `--force` path remains the explicit captain-approved discard escape hatch.
 
 The `resolve` subcommand requires a decision file and at least one existing dependent task whose structured `blocked-by` edge points to the hold.
 It records the decision digest and routed task identities as a retry identity in the hold body, clears each dependency edge through tasks-axi, and marks the hold Done only after those writes succeed.
-An exact retry can finish a partial routing operation, while a changed decision or routed-task set is rejected.
+An exact retry can finish a partial active routing operation or confirm a matching archived resolution without mutation, while a changed decision or routed-task set is rejected.
 A failed intermediate step leaves the hold open.
 
 ## Structured read surfaces
@@ -43,11 +45,13 @@ The projection remains read-only and does not inspect historical prose.
 Verification date: 2026-07-14.
 Additional quoted `blocked_by` regression verification date: 2026-07-17.
 Plural blocker-readiness and mixed-home projection verification date: 2026-07-22.
+Archive-aware durable identity lookup verification date: 2026-07-23.
 
 The focused end-to-end regression uses only synthetic `sample` identities and decision text.
 It begins with a completed investigation and visual review whose genuine unresolved choice exists only in the report.
 The initial Bearings snapshot correctly has no open decision, and the new teardown gate refuses to erase the source.
 A later regression covers tasks-axi's quoted multi-entry `blocked_by` output so `resolve` matches the first, middle, and last ids and rejects a genuinely absent id.
+The archive regression uses synthetic records to cover active-first selection, configured and default archive fallback, archived retry and mutation boundaries, true misses, incompatible tool behavior, and a privacy-safe probe of the active local tasks-axi pin.
 
 The final verification commands and their exact summarized outputs follow.
 
@@ -62,6 +66,19 @@ ok - resolved findings and decision-like prose do not create false holds
 ok - terminal single-owner stale status decisions do not block empty inventory
 ok - main-home and secondmate-home captain holds remain correctly routed
 ok - resolve matches first/middle/last in quoted blocked_by and rejects a genuinely absent id
+
+$ bash tests/fm-decision-hold-archive.test.sh
+ok - active local tasks-axi pin exposes the privacy-safe archive lookup contract
+ok - real-binary helpers isolate HOME and tasks-axi overrides
+ok - active durable decision wins before archive fallback
+ok - default archive fallback supports read-only retries and refuses archived mutation
+ok - durable lookup follows the configured archive path
+ok - active decision identity shadows archive history
+ok - genuine active-and-archive miss remains absent
+ok - missing tasks-axi archive capability is distinct from absence
+ok - malformed tasks-axi archive output is distinct from absence
+ok - code-only NOT_FOUND envelope refuses hold creation
+ok - wrong-status NOT_FOUND envelope refuses hold creation
 
 $ bash tests/fm-fleet-snapshot-view.test.sh
 ok - backlog normalization preserves strict roles and resolves every blocker compatibly
