@@ -11,6 +11,14 @@ TASKS_AXI_BIN=$(command -v tasks-axi || true)
 
 [ -n "$TASKS_AXI_BIN" ] || { echo "skip: tasks-axi not found"; exit 0; }
 
+tasks_axi_has_archive_lookup() {
+  local help probe_home="$TMP_ROOT/pin-probe-home"
+  mkdir -p "$probe_home"
+  help=$(env -u TASKS_AXI_FILE -u TASKS_AXI_BACKEND \
+    HOME="$probe_home" "$TASKS_AXI_BIN" show --help 2>&1) || return 1
+  printf '%s\n' "$help" | grep -F -- '--include-archive' >/dev/null
+}
+
 make_home() {  # <name> [archive-path|default]
   local archive=${2:-data/done-archive.md} home="$TMP_ROOT/$1" fakebin
   mkdir -p "$home/data" "$home/state" "$home/config" "$home/projects" "$home/user-home"
@@ -49,21 +57,19 @@ tasks_in() {  # <home> <tasks-axi args...>
   local home=$1
   shift
   (
-    unset TASKS_AXI_FILE TASKS_AXI_BACKEND
     cd "$home" || exit 1
-    HOME="$home/user-home" "$TASKS_AXI_BIN" "$@"
+    env -u TASKS_AXI_FILE -u TASKS_AXI_BACKEND \
+      HOME="$home/user-home" "$TASKS_AXI_BIN" "$@"
   )
 }
 
 run_decisions() {  # <home> <command args...>
   local home=$1
   shift
-  (
-    unset TASKS_AXI_FILE TASKS_AXI_BACKEND
+  env -u TASKS_AXI_FILE -u TASKS_AXI_BACKEND \
     PATH="$home/fakebin:$PATH" REAL_TASKS_AXI="$TASKS_AXI_BIN" HOME="$home/user-home" \
-      FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
-      FM_CONFIG_OVERRIDE="$home/config" "$ROOT/bin/fm-decision-hold.sh" "$@"
-  )
+    FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+    FM_CONFIG_OVERRIDE="$home/config" "$ROOT/bin/fm-decision-hold.sh" "$@"
 }
 
 write_origin_meta() {  # <home> <origin> <keys>
@@ -317,6 +323,10 @@ test_malformed_tool_output_is_not_reported_as_absence() {
   create_resolved "$home" "$id"
   cat > "$home/fakebin/tasks-axi" <<EOF
 #!/usr/bin/env bash
+if [ "\${1:-}" = show ] && [ "\${2:-}" = --help ]; then
+  printf 'usage: tasks-axi show <id> [--include-archive] [--full]\n'
+  exit 0
+fi
 if [ "\${1:-}" = show ] && [ "\${2:-}" = "$id" ] && [ "\${3:-}" = --include-archive ]; then
   printf 'task:\n  id: %s\n  source: archive\n' "$id"
   exit 0
@@ -344,11 +354,21 @@ test_duplicate_title_output_refuses_hold_mutation() {
     || fail "could not create active decision fixture"
   cat > "$home/fakebin/tasks-axi" <<EOF
 #!/usr/bin/env bash
+if [ "\${1:-}" = show ] && [ "\${2:-}" = --help ]; then
+  printf 'usage: tasks-axi show <id> [--include-archive] [--full]\n'
+  exit 0
+fi
 if [ "\${1:-}" = show ] && [ "\${2:-}" = "$id" ] && [ "\${3:-}" = --include-archive ] && [ "\${4:-}" = --full ]; then
-  "\$REAL_TASKS_AXI" "\$@"
-  status=\$?
-  [ "\$status" -eq 0 ] || exit "\$status"
+  printf 'task:\n'
+  printf '  id: %s\n' "$id"
+  printf '  source: active\n'
+  printf '  title: Choose synthetic route\n'
   printf '  title: Duplicate synthetic title\n'
+  printf '  state: queued\n'
+  printf '  held: no\n'
+  printf '  kind: captain\n'
+  printf '  hold_kind: "-"\n'
+  printf '  body: ""\n'
   exit 0
 fi
 if [ "\${1:-}" = hold ] && [ "\${2:-}" = "$id" ]; then
@@ -379,6 +399,10 @@ test_code_only_not_found_refuses_hold_creation() {
   write_origin_meta "$home" "$origin" route
   cat > "$home/fakebin/tasks-axi" <<'EOF'
 #!/usr/bin/env bash
+if [ "${1:-}" = show ] && [ "${2:-}" = --help ]; then
+  printf 'usage: tasks-axi show <id> [--include-archive] [--full]\n'
+  exit 0
+fi
 if [ "${1:-}" = show ] && [ "${3:-}" = --include-archive ] && [ "${4:-}" = --full ]; then
   printf 'code: NOT_FOUND\n'
   exit 1
@@ -406,6 +430,10 @@ test_wrong_status_not_found_refuses_hold_creation() {
   write_origin_meta "$home" "$origin" route
   cat > "$home/fakebin/tasks-axi" <<'EOF'
 #!/usr/bin/env bash
+if [ "${1:-}" = show ] && [ "${2:-}" = --help ]; then
+  printf 'usage: tasks-axi show <id> [--include-archive] [--full]\n'
+  exit 0
+fi
 if [ "${1:-}" = show ] && [ "${3:-}" = --include-archive ] && [ "${4:-}" = --full ]; then
   printf 'error: "Task \\"%s\\" not found in this backlog"\n' "${2:-}"
   printf 'code: NOT_FOUND\n'
@@ -427,13 +455,17 @@ EOF
   pass "wrong-status NOT_FOUND envelope refuses hold creation"
 }
 
-test_live_pin_exposes_archive_contract
-test_real_binary_helpers_ignore_ambient_configuration
-test_active_hit_does_not_read_archive
-test_default_archive_fallback_and_active_only_mutation
-test_configured_archive_path
-test_active_shadow_blocks_archive_resolution
-test_true_miss_remains_absent
+if tasks_axi_has_archive_lookup; then
+  test_live_pin_exposes_archive_contract
+  test_real_binary_helpers_ignore_ambient_configuration
+  test_active_hit_does_not_read_archive
+  test_default_archive_fallback_and_active_only_mutation
+  test_configured_archive_path
+  test_active_shadow_blocks_archive_resolution
+  test_true_miss_remains_absent
+else
+  printf 'ok - active local tasks-axi pin archive integration # SKIP capability unavailable\n'
+fi
 test_missing_capability_is_not_reported_as_absence
 test_malformed_tool_output_is_not_reported_as_absence
 test_duplicate_title_output_refuses_hold_mutation

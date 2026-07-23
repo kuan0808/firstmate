@@ -15,9 +15,54 @@ TASKS_AXI_BIN=$(command -v tasks-axi || true)
 command -v jq >/dev/null 2>&1 || { echo "skip: jq not found"; exit 0; }
 command -v tasks-axi >/dev/null 2>&1 || { echo "skip: tasks-axi not found"; exit 0; }
 
+# These pre-existing lifecycle cases use active records only. Keep their real
+# tasks-axi mutations while supplying the new durable-read envelope explicitly,
+# so an older ambient release cannot mask unrelated lifecycle coverage.
+write_active_archive_lookup_shim() {  # <fakebin>
+  local fakebin=$1
+  cat > "$fakebin/tasks-axi" <<'EOF'
+#!/usr/bin/env bash
+set -u
+
+if [ "${1:-}" = show ] && [ "${2:-}" = --help ]; then
+  output=$("$REAL_TASKS_AXI" "$@" 2>&1)
+  status=$?
+  printf '%s\n' "$output"
+  [ "$status" -eq 0 ] || exit "$status"
+  printf '%s\n' "$output" | grep -F -- '--include-archive' >/dev/null \
+    || printf '  --include-archive\n'
+  exit 0
+fi
+
+if [ "${1:-}" = show ] && [ "${3:-}" = --include-archive ] && [ "${4:-}" = --full ]; then
+  output=$("$REAL_TASKS_AXI" show "${2:-}" --full 2>&1)
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    printf '%s\n' "$output"
+    exit "$status"
+  fi
+  printf '%s\n' "$output" | awk '
+    { print }
+    /^  id: / { print "  source: active" }
+  '
+  exit 0
+fi
+
+if [ "${1:-}" = unblock ] && [ "${2:-}" = sample-route-implementation ] \
+  && [ -f "$FM_HOME/enable-unblock-failure" ] \
+  && [ ! -f "$FM_HOME/unblock-failed-once" ]; then
+  : > "$FM_HOME/unblock-failed-once"
+  exit 1
+fi
+
+exec "$REAL_TASKS_AXI" "$@"
+EOF
+  chmod +x "$fakebin/tasks-axi"
+}
+
 make_home() {  # <name>
   local home="$TMP_ROOT/$1" fakebin
-  mkdir -p "$home/data" "$home/state" "$home/config" "$home/projects"
+  mkdir -p "$home/data" "$home/state" "$home/config" "$home/projects" "$home/user-home"
   cp "$ROOT/.tasks.toml" "$home/.tasks.toml"
   cat > "$home/data/backlog.md" <<'EOF'
 ## In flight
@@ -28,20 +73,23 @@ make_home() {  # <name>
 EOF
   fakebin=$(fm_fakebin "$home")
   fm_fake_exit0 "$fakebin" tmux treehouse no-mistakes gh gh-axi
+  write_active_archive_lookup_shim "$fakebin"
   printf '%s\n' "$home"
 }
 
 run_bearings() {  # <home>
   local home=$1
-  PATH="$home/fakebin:$PATH" FM_HOME="$home" FM_BEARINGS_NOW=2026-07-14T12:00:00Z \
-    "$BEARINGS" --json
+  env -u TASKS_AXI_FILE -u TASKS_AXI_BACKEND \
+    PATH="$home/fakebin:$PATH" REAL_TASKS_AXI="$TASKS_AXI_BIN" HOME="$home/user-home" \
+    FM_HOME="$home" FM_BEARINGS_NOW=2026-07-14T12:00:00Z "$BEARINGS" --json
 }
 
 run_teardown() {  # <home> <id>
   local home=$1 id=$2
-  PATH="$home/fakebin:$PATH" FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" \
-    FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
-    FM_CONFIG_OVERRIDE="$home/config" "$TEARDOWN" "$id"
+  env -u TASKS_AXI_FILE -u TASKS_AXI_BACKEND \
+    PATH="$home/fakebin:$PATH" REAL_TASKS_AXI="$TASKS_AXI_BIN" HOME="$home/user-home" \
+    FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    FM_DATA_OVERRIDE="$home/data" FM_CONFIG_OVERRIDE="$home/config" "$TEARDOWN" "$id"
 }
 
 # Reproduces the loss exactly with privacy-safe synthetic names: the investigation
@@ -96,13 +144,18 @@ EOF
 tasks_in() {  # <home> <tasks-axi args...>
   local home=$1
   shift
-  (cd "$home" && tasks-axi "$@")
+  (
+    cd "$home" || exit 1
+    env -u TASKS_AXI_FILE -u TASKS_AXI_BACKEND \
+      HOME="$home/user-home" "$TASKS_AXI_BIN" "$@"
+  )
 }
 
 run_decisions() {  # <home> <command args...>
   local home=$1
   shift
-  PATH="$home/fakebin:$PATH" REAL_TASKS_AXI="$TASKS_AXI_BIN" \
+  env -u TASKS_AXI_FILE -u TASKS_AXI_BACKEND \
+    PATH="$home/fakebin:$PATH" REAL_TASKS_AXI="$TASKS_AXI_BIN" HOME="$home/user-home" \
     FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
     FM_CONFIG_OVERRIDE="$home/config" "$ROOT/bin/fm-decision-hold.sh" "$@"
 }
@@ -212,16 +265,7 @@ EOF
   tasks_in "$home" add sample-route-followup "Check the selected sample route" \
     --kind ship --repo sample --blocked-by "$route_hold" >/dev/null \
     || fail "could not create second dependent work fixture"
-  cat > "$home/fakebin/tasks-axi" <<'EOF'
-#!/usr/bin/env bash
-if [ "${1:-}" = unblock ] && [ "${2:-}" = sample-route-implementation ] \
-  && [ ! -f "$FM_HOME/unblock-failed-once" ]; then
-  : > "$FM_HOME/unblock-failed-once"
-  exit 1
-fi
-exec "$REAL_TASKS_AXI" "$@"
-EOF
-  chmod +x "$home/fakebin/tasks-axi"
+  : > "$home/enable-unblock-failure"
   if run_decisions "$home" resolve "$id" route --decision-file "$home/route-decision.txt" \
     --routed-to sample-route-implementation --routed-to sample-route-followup \
     > "$home/partial-route.out" 2> "$home/partial-route.err"; then
@@ -414,7 +458,7 @@ test_secondmate_hold_stays_in_authoritative_home() {
   local parent mate origin hold json
   parent=$(make_home main-routing)
   mate="$TMP_ROOT/sample-mate-home"
-  mkdir -p "$mate/data" "$mate/state" "$mate/config" "$mate/projects" "$mate/bin"
+  mkdir -p "$mate/data" "$mate/state" "$mate/config" "$mate/projects" "$mate/bin" "$mate/user-home"
   cp "$ROOT/.tasks.toml" "$mate/.tasks.toml"
   printf '# Synthetic secondmate home\n' > "$mate/AGENTS.md"
   printf 'sample-mate\n' > "$mate/.fm-secondmate-home"
@@ -427,6 +471,7 @@ test_secondmate_hold_stays_in_authoritative_home() {
 EOF
   fakebin=$(fm_fakebin "$mate")
   fm_fake_exit0 "$fakebin" tmux treehouse no-mistakes gh gh-axi
+  write_active_archive_lookup_shim "$fakebin"
   origin=sample-mate-review
   mkdir -p "$mate/data/$origin"
   tasks_in "$mate" add "$origin" "Investigate secondmate sample" --kind scout --repo sample --start >/dev/null
