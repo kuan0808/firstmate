@@ -77,6 +77,7 @@ ok - active decision identity shadows archive history
 ok - genuine active-and-archive miss remains absent
 ok - missing tasks-axi archive capability is distinct from absence
 ok - malformed tasks-axi archive output is distinct from absence
+ok - duplicate title output refuses active hold mutation
 ok - code-only NOT_FOUND envelope refuses hold creation
 ok - wrong-status NOT_FOUND envelope refuses hold creation
 
