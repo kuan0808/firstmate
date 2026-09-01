@@ -2020,9 +2020,20 @@ EOF
       fi
       task=$(window_to_task "$w" "$STATE")
       if ! afk_present && [ "$busy_now" -ne 0 ] && watch_bounded_wait_valid "$w" "$task"; then
+        # The cadence is keyed on the pane's pause marker, not on hash identity: a
+        # live agent's idle footer re-renders on its own, so a marked pane whose log
+        # still declares the wait keeps the bounded recheck across a hash change
+        # (handle_paused_stale advances the suppressor to the new hash). A busy
+        # observation or a status change still clears the marker and restores
+        # first-sight surfacing. The merge-wait class keeps its own verdicts.
         case "$(pause_state_class "$w" "$task")" in
           paused)  handle_paused_stale "$w" "$task" "$h" paused ;;
           waiting) handle_paused_stale "$w" "$task" "$h" waiting ;;
+          none)    if [ -e "$pf" ] && status_is_paused_or_captain_held "$last"; then
+                     handle_paused_stale "$w" "$task" "$h" paused
+                   else
+                     clear_pause_tracking "$key"
+                   fi ;;
           *)       clear_pause_tracking "$key" ;;
         esac
       elif [ "$paused_bound" -ne 0 ] && [ -e "$pf" ]; then

@@ -2248,6 +2248,113 @@ test_exited_declared_pause_is_bounded_but_live_gate_surfaces() {
   pass "exited declared-pause and captain-held panes use bounded pause cadence while a live decision gate still surfaces once"
 }
 
+# --- declared pause, live agent, idle footer that keeps re-rendering: the pause
+#     cadence is keyed on the pane's pause marker, never on hash identity ------
+# The 2026-09-02 case: the first Claude Code crewmates under Herdr declared paused:
+# and idled, but the captain's status line renders a wall clock, quota reset
+# countdowns and a running cost, so the idle pane's hash changed every minute.
+# Each new hash was treated as a fresh first sight for a live agent: the changed-
+# hash branch cleared the pause tracking, and two polls later the pane surfaced a
+# bare stale wake and rewrote the pause markers, so the FM_PAUSE_RESURFACE_SECS
+# throttle never applied - three bare stale wakes in five minutes. Pi panes hid it
+# because their idle footer is static (the same-hash fallback already kept the
+# cadence). Trigger: idle footer churn. Mask: a static footer. Symptom: repeated
+# bare stale wakes for one declared pause.
+test_paused_live_agent_churning_footer_keeps_pause_cadence() {
+  local dir state fakebin out drain_out capture_file statusf window key sig pid throttle back i
+  dir=$(make_case paused-churning-footer); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; drain_out="$dir/drain.out"; capture_file="$dir/pane.txt"
+  statusf="$state/churn.status"; window="test:fm-churn"
+  printf 'idle, holding for the sibling change\nstatus: 06:04 · 0.42 USD\n' > "$capture_file"
+  printf 'window=%s\nkind=ship\nharness=claude\nbackend=tmux\n' "$window" > "$state/churn.meta"
+  printf 'paused: waiting for the sibling change to land on main\n' > "$statusf"
+  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-churn_status"
+  key=$(printf '%s' "$window" | tr ':/.' '___')
+  export FM_FAKE_CREW_STATE='state: paused · source: status-log · waiting for the sibling change to land on main'
+
+  # Phase A: the first sight of a live agent's declared pause surfaces once and
+  # records the pause tracking, exactly as before.
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=claude \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 100 || fail "a live agent's declared pause did not surface on first sight"
+  grep -Fx "stale: $window" "$out" >/dev/null || fail "first sight of a live declared pause was not a plain stale: $(cat "$out")"
+  [ -e "$state/.paused-$key" ] || fail "first sight did not record the pause marker"
+  throttle=$(cat "$state/.paused-resurfaced-$key" 2>/dev/null || true)
+  [ -n "$throttle" ] || fail "first sight did not record the pause re-surface throttle"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the first-sight surface"
+
+  # Phase B, mask: with the footer unchanged the same hash rides the pause cadence.
+  : > "$out"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=claude \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  i=0
+  while [ "$i" -lt 2 ]; do
+    wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "an unchanged paused pane left the pause cadence: $(cat "$out")"; }
+    i=$((i + 1))
+  done
+  [ -e "$state/.paused-$key" ] || { reap "$pid"; fail "an unchanged paused pane lost its pause marker"; }
+
+  # Phase B, trigger: the idle footer re-renders (clock, cost) while the agent
+  # stays live and the status line stays the same declared pause. The new hash
+  # must stay on the pause cadence: no wake, marker kept, suppressor advanced
+  # to the new hash, and the throttle untouched.
+  printf 'idle, holding for the sibling change\nstatus: 06:05 · 0.43 USD\n' > "$capture_file"
+  i=0
+  while [ "$i" -lt 4 ]; do
+    wait_poll_cycle "$state" "$pid" \
+      || { reap "$pid"; fail "a paused pane whose idle footer re-rendered was re-surfaced as a fresh stale: $(cat "$out")"; }
+    i=$((i + 1))
+  done
+  printf 'idle, holding for the sibling change\nstatus: 06:06 · 0.43 USD\n' > "$capture_file"
+  i=0
+  while [ "$i" -lt 4 ]; do
+    wait_poll_cycle "$state" "$pid" \
+      || { reap "$pid"; fail "a paused pane whose idle footer re-rendered twice was re-surfaced as a fresh stale: $(cat "$out")"; }
+    i=$((i + 1))
+  done
+  [ ! -s "$out" ] || { reap "$pid"; fail "footer churn under a declared pause printed a wake reason: $(cat "$out")"; }
+  [ ! -s "$state/.wake-queue" ] || { reap "$pid"; fail "footer churn under a declared pause enqueued a wake: $(cat "$state/.wake-queue")"; }
+  [ -e "$state/.paused-$key" ] || { reap "$pid"; fail "footer churn cleared the pause marker"; }
+  [ "$(cat "$state/.stale-$key" 2>/dev/null || true)" = "$(cat "$state/.hash-$key" 2>/dev/null || true)" ] \
+    || { reap "$pid"; fail "the stale suppressor did not follow the churned hash under the pause cadence"; }
+  [ "$(cat "$state/.paused-resurfaced-$key" 2>/dev/null || true)" = "$throttle" ] \
+    || { reap "$pid"; fail "footer churn rewrote the pause re-surface throttle"; }
+  [ ! -e "$state/.stale-since-$key" ] || { reap "$pid"; fail "footer churn under a declared pause started the wedge timer"; }
+  reap "$pid"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the intentional churn-phase stop"
+
+  # Phase C: the cadence is bounded across churn, not silenced - past the
+  # threshold the churned pane re-surfaces exactly once as a paused recheck.
+  back=$(( $(date +%s) - 500 ))
+  if [ "$(uname)" = Darwin ]; then
+    touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf" "$state/.paused-resurfaced-$key"
+  else
+    touch -m -d "@$back" "$statusf" "$state/.paused-resurfaced-$key"
+  fi
+  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-churn_status"
+  printf 'idle, holding for the sibling change\nstatus: 06:07 · 0.44 USD\n' > "$capture_file"
+  : > "$out"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=claude \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 100 || fail "a churned paused pane past the threshold did not re-surface for its recheck"
+  grep -F "awaiting external" "$out" >/dev/null || fail "the churned pane's recheck was not labeled a paused recheck: $(cat "$out")"
+  grep -Fx "stale: $window" "$out" >/dev/null && fail "the churned pane's recheck was a bare stale instead of a paused recheck"
+  grep -F "possible wedge" "$out" >/dev/null && fail "a churned declared pause was mislabeled a possible wedge"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after the churned recheck failed"
+  [ "$(grep -c "$(printf '\tstale\t')" "$drain_out")" -eq 1 ] || fail "the churned recheck queued more than one stale wake: $(cat "$drain_out")"
+  unset FM_FAKE_CREW_STATE
+  pass "a live agent's declared pause keeps its bounded recheck cadence across idle footer churn"
+}
+
 test_secondmate_paused_resurfaces_in_normal_mode() {
   local dir state fakebin out capture_file statusf window key pane_hash sig pid back
   dir=$(make_case secondmate-paused-resurface); state="$dir/state"; fakebin="$dir/fakebin"
@@ -4059,6 +4166,7 @@ test_nonterminal_stale_paused_absorbed_then_resurfaced
 test_done_canonical_poll_uses_bounded_wait_cadence
 test_done_without_canonical_poll_still_surfaces
 test_exited_declared_pause_is_bounded_but_live_gate_surfaces
+test_paused_live_agent_churning_footer_keeps_pause_cadence
 test_secondmate_paused_resurfaces_in_normal_mode
 test_secondmate_captain_held_resurfaces_in_normal_mode
 test_secondmate_nonpaused_stale_remains_suppressed
