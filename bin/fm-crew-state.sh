@@ -379,9 +379,11 @@ nm_ci_checks_state() {
 # is exact) - but branch + coarse status is exactly what this predicate needs:
 # is a run for THIS branch active right now. Echoes the first (most recent)
 # matching row's status word (running/completed/cancelled/failed), or empty
-# when the branch has no run within FM_CREW_STATE_RUNS_LIMIT rows.
+# when the branch has no run within FM_CREW_STATE_RUNS_LIMIT rows, when a head
+# is unresolvable, or when a live row was skipped and only OLDER terminal
+# history would otherwise answer.
 nm_runs_status_for_branch() {  # <branch>
-  local branch=$1 out row st rest br sha
+  local branch=$1 out row st rest br sha active_unmatched=0
   out=$(nm_run runs --limit "$FM_CREW_STATE_RUNS_LIMIT")
   [ -n "$out" ] || return 0
   while IFS= read -r row; do
@@ -402,7 +404,18 @@ nm_runs_status_for_branch() {  # <branch>
         # mismatch. Stop instead of surfacing an older, superseded row;
         # the caller's pane/log fallback can answer without misattribution.
         fm_nm_head_resolvable "$WT" "$sha" || return 0
+        # A resolvable-but-mismatched head keeps the historical reused-branch
+        # skip, but a LIVE row skipped that way is still current work: remember
+        # it so the skip below cannot hand this crew's current state to an
+        # OLDER terminal row and report a superseded failure as the truth.
+        [ "$st" != running ] || active_unmatched=1
         continue
+      fi
+      # Newer live run present, this matching row is terminal history: neither
+      # can be asserted, so answer nothing and let the pane/log fallback decide.
+      # Non-terminal ambiguity beats a false `failed`.
+      if [ "$active_unmatched" = 1 ] && [ "$st" != running ]; then
+        return 0
       fi
       printf '%s' "$st"
       return 0
