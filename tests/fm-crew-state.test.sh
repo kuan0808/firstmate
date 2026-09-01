@@ -1489,6 +1489,57 @@ EOF
   pass "coarse scan stops on an unresolvable active row instead of binding an older one"
 }
 
+# The coarse fallback's reused-branch skip must not hand this crew's current
+# state to an OLDER terminal row after skipping a LIVE one. Upstream's own
+# behaviors are held fixed around it: a newest matching terminal row still wins
+# when nothing live was skipped, and an unresolvable head still stops the scan.
+test_live_coarse_row_is_not_replaced_by_older_terminal_history() {
+  reset_fakes
+  local d base pipeline_head pipeline_short local_short out
+  d=$(new_case live-coarse-row)
+  make_repo_on_branch "$d/wt" fm/feat-current-run
+  base=$(git -C "$d/wt" rev-parse HEAD)
+  git -C "$d/wt" commit -q --allow-empty -m 'pipeline fix history'
+  pipeline_head=$(git -C "$d/wt" rev-parse HEAD)
+  git -C "$d/wt" reset -q --hard "$base"
+  git -C "$d/wt" commit -q --allow-empty -m 'local validation history'
+  pipeline_short=$(git -C "$d/wt" rev-parse --short=8 "$pipeline_head")
+  local_short=$(git -C "$d/wt" rev-parse --short=8 HEAD)
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/current-run.meta" "window=fm:fm-current-run" "worktree=$d/wt" "kind=ship"
+  FM_FAKE_RUN_HEAD="$pipeline_head"
+  FM_FAKE_AXI_STATUS="$(run_running fm/feat-current-run)"
+  FM_FAKE_RUNS_LIST="$(cat <<EOF
+  running  fm/feat-current-run ${pipeline_short}  2026-07-26 02:00
+  failed   fm/feat-current-run ${local_short}  2026-07-26 01:00
+EOF
+)"
+  out=$(run_crew_state "$d" current-run)
+  assert_not_contains "$out" "state: failed" \
+    "an older same-branch failure was asserted after a live row was skipped"
+
+  # Upstream behavior held: with no live row skipped, the newest matching
+  # terminal row still answers.
+  FM_FAKE_AXI_STATUS="$(run_running fm/other-crew)"
+  FM_FAKE_RUNS_LIST="failed  fm/feat-current-run ${local_short}  2026-07-26 01:00"
+  out=$(run_crew_state "$d" current-run)
+  assert_contains "$out" "state: failed" \
+    "the newest matching failure stopped surfacing when no live row was skipped"
+
+  # Upstream behavior held: an unresolvable head still stops the scan instead of
+  # falling through onto older history.
+  FM_FAKE_RUNS_LIST="$(cat <<EOF
+  completed  fm/feat-current-run deadbee1  2026-07-26 03:00
+  failed     fm/feat-current-run ${local_short}  2026-07-26 01:00
+EOF
+)"
+  out=$(run_crew_state "$d" current-run)
+  assert_not_contains "$out" "state: failed" \
+    "an unresolvable newest head no longer stops the coarse scan"
+  pass "a live same-branch row is never replaced by older terminal history in the coarse scan"
+}
+
+
 # Negative control: the exemption is gated on pipeline_owned specifically - any
 # other branch_sync state keeps the strict head rule.
 test_non_pipeline_owned_unresolvable_head_not_attributed() {
@@ -1603,6 +1654,7 @@ test_local_advanced_past_run_head_invalidates
 test_pipeline_owned_active_run_beats_superseded_failed_row
 test_failed_run_with_no_later_run_still_surfaces
 test_coarse_unresolvable_active_row_never_falls_to_older_row
+test_live_coarse_row_is_not_replaced_by_older_terminal_history
 test_non_pipeline_owned_unresolvable_head_not_attributed
 test_pipeline_owned_terminal_run_not_exempt
 test_missing_run_head_falls_back_to_current_state
