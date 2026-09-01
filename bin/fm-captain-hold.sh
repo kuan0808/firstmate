@@ -18,6 +18,16 @@
 # All backlog mutations run in the active FM_HOME, which keeps main-home and
 # secondmate-home ownership aligned with the work that discovered the call.
 #
+# Reads split two ways. Durable IDENTITY reads (verify_hold_durable,
+# resolve_entry, and the existence check `hold` branches on) go through
+# task_show_durable, which is active-first with a read-only Done archive
+# fallback: a captain call that was properly answered and then aged past
+# .tasks.toml's done_keep must not read as absent, or a completion gate refuses
+# an investigation whose calls were all settled. Every MUTATION still reads and
+# writes the active backlog only, so the archive is never rewritten and an
+# archived identity is refused rather than recreated. The archive capability is
+# required up front by require_tasks_axi rather than probed per call.
+#
 # Usage:
 #   fm-captain-hold.sh hold <task-id> --reason <reason> \
 #     [--title <title>] [--repo <repo>] [--origin <origin-id>] [--until YYYY-MM-DD]
@@ -219,11 +229,14 @@ tasks_axi() {
 }
 
 require_tasks_axi() {
-  fm_tasks_axi_compatible || fail "compatible tasks-axi is required"
+  fm_tasks_axi_archive_lookup_compatible \
+    || fail "archive-capable tasks-axi show <id> --include-archive --full is required"
   tasks-axi hold --help 2>&1 | grep -F -- '--kind captain' >/dev/null \
     || fail "tasks-axi does not expose the captain-hold contract"
 }
 
+# The ACTIVE-ONLY read. Every mutation path keeps using it, so nothing this
+# script writes can ever be aimed at an archived row.
 task_show() {  # <id>
   tasks_axi show "$1" --full 2>/dev/null
 }
@@ -231,6 +244,61 @@ task_show() {  # <id>
 show_field() {  # <show-output> <field>
   local output=$1 field=$2
   printf '%s\n' "$output" | sed -n "s/^  $field: //p" | head -1
+}
+
+TASK_SHOW_DURABLE_OUTPUT=''
+
+output_line_count() {  # <output> <exact-line>
+  EXPECTED_LINE=$2 awk '$0 == ENVIRON["EXPECTED_LINE"] { count++ } END { print count + 0 }' <<EOF
+$1
+EOF
+}
+
+output_field_count() {  # <show-output> <field>
+  printf '%s\n' "$1" | awk -v prefix="  $2: " 'index($0, prefix) == 1 { count++ } END { print count + 0 }'
+}
+
+# The DURABLE read: active first, then the read-only Done archive. Used only
+# where a captain call's identity must survive archiving; it never mutates and
+# is never the read a mutation is planned from.
+#
+# It is strict on purpose. Absence is admitted ONLY on the exact canonical
+# NOT_FOUND envelope, so a capability gap, an integration failure, or a
+# malformed record can never be read as "the captain never held this" - that
+# misread is precisely how a properly answered call would be silently dropped.
+# Duplicate load-bearing fields (a second `title:` smuggled in through a body)
+# are malformed for the same reason. Sets TASK_SHOW_DURABLE_OUTPUT; returns 1
+# only for proven canonical absence, and fails loudly for anything else.
+task_show_durable() {  # <id>
+  local id=$1 output source shown_id field status expected_error unexpected
+  TASK_SHOW_DURABLE_OUTPUT=''
+  if output=$(tasks_axi show "$id" --include-archive --full 2>&1); then
+    shown_id=$(show_field "$output" id)
+    source=$(show_field "$output" source)
+    if [ "$(output_line_count "$output" task:)" != 1 ] || [ "$shown_id" != "$id" ]; then
+      fail "tasks-axi durable show returned malformed output for $id"
+    fi
+    for field in id source title state held kind hold_kind body; do
+      [ "$(output_field_count "$output" "$field")" = 1 ] \
+        || fail "tasks-axi durable show returned malformed output for $id"
+    done
+    case "$source" in active|archive) ;; *) fail "tasks-axi durable show returned malformed output for $id" ;; esac
+    TASK_SHOW_DURABLE_OUTPUT=$output
+    return 0
+  else
+    status=$?
+  fi
+  expected_error=$(printf 'error: "Task \\"%s\\" not found in this backlog"' "$id")
+  unexpected=$(printf '%s\n' "$output" \
+    | grep -vF -e "$expected_error" -e 'code: NOT_FOUND' \
+    | grep -vE '^help\[[0-9]+\]: ' || true)
+  if [ "$status" = 1 ] \
+    && [ "$(output_line_count "$output" "$expected_error")" = 1 ] \
+    && [ "$(output_line_count "$output" 'code: NOT_FOUND')" = 1 ] \
+    && [ -z "$unexpected" ]; then
+    return 1
+  fi
+  fail "tasks-axi durable show failed incompatibly for $id"
 }
 
 decode_shown_value() {  # <shown-field>
@@ -344,7 +412,9 @@ resolution_block() {  # <mode>
 # surviving even when a date gate has expired) or a recorded captain answer.
 verify_hold_durable() {  # <task-id>
   local id=$1 show state hold_kind body
-  show=$(task_show "$id") || fail "captain-held task $id is absent from $FM_HOME/data/backlog.md"
+  task_show_durable "$id" \
+    || fail "captain-held task $id is absent from the active backlog and the Done archive"
+  show=$TASK_SHOW_DURABLE_OUTPUT
   state=$(show_field "$show" state)
   hold_kind=$(show_field_value "$show" hold_kind)
   body=$(show_field "$show" body)
@@ -361,19 +431,21 @@ verify_hold_durable() {  # <task-id>
 # exact task id when it exists, else the legacy derived identity.
 resolve_entry() {  # <origin-or-empty> <entry>; prints the resolved id or fails
   local origin=$1 entry=$2 legacy
-  if task_show "$entry" >/dev/null 2>&1; then
+  # Durable, because the entry being resolved is an INVENTORIED identity whose
+  # answered row may already have aged into the Done archive.
+  if task_show_durable "$entry" >/dev/null; then
     printf '%s' "$entry"
     return 0
   fi
   if [ -n "$origin" ] && [ "$origin" != "$BINDING_ANY" ]; then
     legacy=$(legacy_hold_id "$origin" "$entry")
-    if task_show "$legacy" >/dev/null 2>&1; then
+    if task_show_durable "$legacy" >/dev/null; then
       printf '%s' "$legacy"
       return 0
     fi
-    fail "no captain-held task $entry and no legacy identity $legacy in $FM_HOME/data/backlog.md"
+    fail "no captain-held task $entry and no legacy identity $legacy in $FM_HOME/data/backlog.md or its Done archive"
   fi
-  fail "no captain-held task $entry in $FM_HOME/data/backlog.md"
+  fail "no captain-held task $entry in $FM_HOME/data/backlog.md or its Done archive"
 }
 
 command_hold() {
@@ -404,7 +476,14 @@ command_hold() {
     esac
   fi
   require_tasks_axi
-  if show=$(task_show "$id"); then
+  # Durable existence, ACTIVE-ONLY mutation. Reading only the active backlog here
+  # would let an archived, already-answered captain call be silently recreated as
+  # a brand-new task under the same identity; refusing instead keeps the archive
+  # immutable and forces a genuinely new call to take a new task id.
+  if task_show_durable "$id"; then
+    show=$TASK_SHOW_DURABLE_OUTPUT
+    [ "$(show_field "$show" source)" != archive ] \
+      || fail "task $id is archived and cannot be mutated; a new captain call needs its own task"
     state=$(show_field "$show" state)
     [ "$state" != "done" ] \
       || fail "task $id is already closed; a new captain call needs its own task"

@@ -1,6 +1,6 @@
 # shellcheck shell=bash
-# Shared tasks-axi backend selection and compatibility probe for bootstrap,
-# teardown, and secondmate backlog handoff.
+# Shared tasks-axi backend selection and compatibility probes for bootstrap,
+# teardown, secondmate backlog handoff, and archive-aware captain-hold reads.
 # Usage: . bin/fm-tasks-axi-lib.sh
 #
 # Compatible means tasks-axi --version reports FM_TASKS_AXI_MIN or newer,
@@ -37,6 +37,7 @@
 FM_TASKS_AXI_MIN=0.2.4
 
 FM_TASKS_AXI_COMPATIBLE_MEMO=${FM_TASKS_AXI_COMPATIBLE:-}
+FM_TASKS_AXI_ARCHIVE_LOOKUP_MEMO=
 unset FM_TASKS_AXI_COMPATIBLE
 case "$FM_TASKS_AXI_COMPATIBLE_MEMO" in
   0|1) ;;
@@ -97,6 +98,30 @@ fm_tasks_axi_mv_has_multi_id() {
   command -v tasks-axi >/dev/null 2>&1 || return 1
   output=$(tasks-axi mv --help 2>&1) || return 1
   printf '%s\n' "$output" | grep -F -- '[<id>...]' >/dev/null
+}
+
+# Captain-call identities outlive the ACTIVE backlog: tasks-axi archives Done
+# rows past done_keep, and an answered captain hold that ages out is then
+# invisible to a plain `show`. This opt-in probe stays SEPARATE from routine
+# compatibility so an official active-only build remains usable for every
+# unrelated backlog operation, while the captain-hold lifecycle - whose durable
+# reads must span the archive - can demand the capability explicitly instead of
+# silently reading a resolved call as absent. Memoized for one process so each
+# durable read does not fork another help probe.
+fm_tasks_axi_archive_lookup_compatible() {
+  local output
+  case "$FM_TASKS_AXI_ARCHIVE_LOOKUP_MEMO" in
+    1) return 0 ;;
+    0) return 1 ;;
+  esac
+  if fm_tasks_axi_compatible \
+    && output=$(tasks-axi show --help 2>&1) \
+    && printf '%s\n' "$output" | grep -F -- '--include-archive' >/dev/null; then
+    FM_TASKS_AXI_ARCHIVE_LOOKUP_MEMO=1
+    return 0
+  fi
+  FM_TASKS_AXI_ARCHIVE_LOOKUP_MEMO=0
+  return 1
 }
 
 fm_backlog_backend_value() {
