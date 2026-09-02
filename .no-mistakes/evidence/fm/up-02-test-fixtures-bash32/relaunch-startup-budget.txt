@@ -1,0 +1,12 @@
+# Slow-start simulation: the fake transport stub needs 8s to reach trace delivery,
+# so the relaunch startup marker lands after the old 200-iteration poll budget.
+# Only that delay is injected; everything else is the real fm-control relaunch test
+# (test_relaunch_serializes_concurrent_durable_metadata_publication).
+
+$ /bin/bash <relaunch metadata-race test, BASE startup wait: 200 x 0.01s>
+not ok - relaunch did not reach trace delivery
+exit=1
+
+$ /bin/bash <same test, THIS BRANCH startup wait: 1000 x 0.01s = the 10s budget this file already uses>
+ok - fm-control relaunch: delivery and concurrent task metadata publication serialize
+exit=0

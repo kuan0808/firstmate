@@ -1,0 +1,20 @@
+# Composer block of the real CI step, extracted from .github/workflows/ci.yml
+# job: macos-stock-bash   shell: /bin/bash {0}   (stock macOS Bash 3.2)
+--- extracted script ---
+composer_output=$(/bin/bash tests/fm-composer-lib.test.sh)
+printf '%s\n' "$composer_output"
+composer_count=$(printf '%s\n' "$composer_output" | grep -c '^ok - ')
+[ "$composer_count" -eq 33 ] || {
+  echo "::error::expected 33 composer classifier tests, got $composer_count"
+  exit 1
+}
+--- run against this branch under /bin/bash 3.2 ---
+ok - fm_composer_queued_enter_verdict: pending + busy returns empty (queued Enter)
+ok - fm_composer_queued_enter_verdict: pending + idle/unknown stays pending
+ok - fm_composer_queued_enter_verdict: only proven pending is converted
+gate exit=0
+
+--- same gate against a drifted suite that reports only 32 tests ---
+ok - stub 32
+::error::expected 33 composer classifier tests, got 32
+gate exit=1

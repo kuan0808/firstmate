@@ -1,0 +1,6 @@
+$ /bin/bash --version | head -1
+GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
+
+$ /bin/bash tests/fm-composer-lib.test.sh   # BEFORE fix (base fixture, stock macOS Bash 3.2)
+not ok - a half-block rule row must count as a structural edge
+exit=1

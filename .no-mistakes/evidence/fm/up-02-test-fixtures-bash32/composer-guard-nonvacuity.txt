@@ -1,0 +1,7 @@
+# Guard check: strip the footer rows below the closing half-block rule from the
+# classified fixture. The non-vacuousness guard must refuse the gutted fixture
+# instead of passing trivially (the silent-retirement path from review round 1).
+
+$ /bin/bash tests/fm-composer-lib.test.sh   # fixture with its footer removed
+not ok - fixture lost its footer content
+exit=1
