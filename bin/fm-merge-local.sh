@@ -104,14 +104,28 @@ if [ -n "$(git -C "$PROJ" status --porcelain 2>/dev/null | head -1)" ]; then
   exit 1
 fi
 
-# Clean fast-forward only: DEFAULT must be an ancestor of BRANCH.
-if ! git -C "$PROJ" merge-base --is-ancestor "$DEFAULT" "$BRANCH"; then
+# Clean fast-forward only: DEFAULT must be an ancestor of the exact tip the
+# readiness checks inspected, not of whatever the mutable branch name resolves
+# to by the time this line runs.
+if ! git -C "$PROJ" merge-base --is-ancestor "$DEFAULT" "$branch_head"; then
   echo "REFUSED: $BRANCH is not a fast-forward of $DEFAULT (it has diverged)." >&2
   echo "Have the crewmate rebase $BRANCH onto $DEFAULT, then retry." >&2
   exit 1
 fi
 
+# Every refusal above is evidence about one commit. A worker that advanced
+# fm/<id> since then holds work this run never inspected, and neither tip is
+# safe to land: the captured one silently publishes an older head, the new one
+# is unverified. Refuse instead, and land the captured SHA rather than the
+# branch name so the name cannot resolve to something else under us.
+now_head=$(git -C "$PROJ" rev-parse --verify --quiet "refs/heads/$BRANCH" 2>/dev/null || true)
+if [ "$now_head" != "$branch_head" ]; then
+  echo "REFUSED: $BRANCH advanced from $branch_head to ${now_head:-<missing>} while this landing was validating; local $DEFAULT was not moved" >&2
+  echo "Re-run this landing once the crewmate has stopped writing to $BRANCH." >&2
+  exit 1
+fi
+
 before=$(git -C "$PROJ" rev-parse --short "$DEFAULT")
-git -C "$PROJ" merge --ff-only "$BRANCH" >/dev/null
+git -C "$PROJ" merge --ff-only "$branch_head" >/dev/null
 after=$(git -C "$PROJ" rev-parse --short "$DEFAULT")
 echo "merged $BRANCH into local $DEFAULT ($before -> $after) in $PROJ"

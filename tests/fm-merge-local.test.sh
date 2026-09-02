@@ -129,10 +129,63 @@ test_branch_actor_is_still_refused_first() {
   pass "the supervision-branch role partition still refuses local landing ahead of the readiness checks"
 }
 
+# The readiness checks certify ONE commit. Everything between them and the
+# merge used to re-resolve the mutable branch name, so a worker that committed
+# in that window had its uninspected tip landed. The shim below advances
+# fm/task-x1 exactly when the script reaches its fast-forward check.
+install_racing_git() {  # <fakebin> <task-worktree> <marker>
+  cat > "$1/git" <<'SH'
+#!/usr/bin/env bash
+real=${FM_TEST_REAL_GIT:?}
+for arg in "$@"; do
+  [ "$arg" = merge-base ] || continue
+  if [ ! -e "${FM_TEST_RACE_MARK:?}" ]; then
+    : > "$FM_TEST_RACE_MARK"
+    printf 'late\n' > "${FM_TEST_RACE_WT:?}/late.txt"
+    "$real" -C "$FM_TEST_RACE_WT" add late.txt >/dev/null 2>&1
+    "$real" -C "$FM_TEST_RACE_WT" commit -qm late-work >/dev/null 2>&1
+  fi
+  break
+done
+exec "$real" "$@"
+SH
+  chmod +x "$1/git"
+  FM_TEST_REAL_GIT=$(command -v git)
+  FM_TEST_RACE_WT=$2
+  FM_TEST_RACE_MARK=$3
+  export FM_TEST_REAL_GIT FM_TEST_RACE_WT FM_TEST_RACE_MARK
+}
+
+test_branch_advanced_during_validation_refuses() {
+  local case_dir fakebin inspected before raced rc=0
+  case_dir=$(make_case racing-branch)
+  commit_task_change "$case_dir"
+  inspected=$(git -C "$case_dir/wt" rev-parse HEAD)
+  before=$(git -C "$case_dir/project" rev-parse main)
+  fakebin=$(fm_fakebin "$case_dir")
+  install_racing_git "$fakebin" "$case_dir/wt" "$case_dir/raced"
+
+  PATH="$fakebin:$PATH" run_merge "$case_dir" >"$case_dir/out" 2>"$case_dir/err" || rc=$?
+  unset FM_TEST_REAL_GIT FM_TEST_RACE_WT FM_TEST_RACE_MARK
+
+  # Without a real divergence this case would pass vacuously on any script.
+  assert_present "$case_dir/raced" "the shim never fired, so this case proves nothing"
+  raced=$(git -C "$case_dir/wt" rev-parse HEAD)
+  [ "$raced" != "$inspected" ] || fail "the task branch did not move during validation"
+
+  expect_code 1 "$rc" "a branch that advanced during validation was not refused"
+  assert_grep 'advanced from' "$case_dir/err" \
+    "the refusal did not name the moved branch: $(cat "$case_dir/err")"
+  [ "$(git -C "$case_dir/project" rev-parse main)" = "$before" ] \
+    || fail "a refused landing moved main (uninspected tip $raced)"
+  pass "a task branch that advances during validation refuses instead of landing an uninspected commit"
+}
+
 test_clean_exact_tip_succeeds
 test_branch_actor_is_still_refused_first
 test_dirty_worktree_refuses
 test_wrong_branch_and_tip_refuse
 test_non_ship_and_divergence_refuse
+test_branch_advanced_during_validation_refuses
 
 echo '# all fm-merge-local tests passed'
