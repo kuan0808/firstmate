@@ -258,8 +258,20 @@ teardown_release_locks() {
     CONTROL_LOCK_HELD=0
   fi
   fm_lease_guard_release || true
+  # Bash reports $? as 0 inside this trap after a fatal shell error such as a
+  # failed `source` of a missing sibling, so returning it as-is would turn that
+  # abort into a silent exit 0 that callers read as success. Every path that
+  # legitimately exits 0 has already removed the task record, so a record that
+  # is still present at exit 0 is the one signature of an aborted teardown.
+  # The message goes to the stderr saved below because the abort may happen
+  # inside a call whose own stderr is deliberately discarded.
+  if [ "$status" -eq 0 ] && { [ -e "$STATE/$ID.meta" ] || [ -L "$STATE/$ID.meta" ]; }; then
+    echo "error: teardown of $ID aborted before its task record was removed; every durable record is retained" >&3
+    exit 1
+  fi
   return "$status"
 }
+exec 3>&2
 trap teardown_release_locks EXIT
 fm_lock_try_acquire "$CONTROL_LOCK" || {
   echo "error: another lifecycle action is already running for task $ID; nothing was changed" >&2
