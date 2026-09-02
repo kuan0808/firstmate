@@ -185,6 +185,32 @@ test_teardown_skips_gracefully_when_dir_missing() {
   pass "fm-teardown skips gracefully when tasktmp= points to a nonexistent dir"
 }
 
+test_teardown_fails_loudly_when_a_sourced_sibling_is_missing() {
+  # A fatal `source` of a missing sibling (here the one the tmux adapter loads
+  # inside teardown's stderr-discarding kill call) aborts the script, and Bash
+  # then reports $? as 0 inside the EXIT trap. Teardown must still exit
+  # non-zero, say so on its real stderr, and leave every durable record in
+  # place rather than let the caller read a silent exit 0 as success.
+  local id=td-nosib-z5
+  local task_tmp="$TMP_ROOT/fm-$id"
+  mkdir -p "$task_tmp/gotmp"
+  local fake err
+  fake=$(make_fake_root "$id" "$task_tmp")
+  rm "$fake/bin/fm-session-lock-lib.sh"
+  err="$TMP_ROOT/$id.stderr"
+  if FM_HOME="$fake" bash "$fake/bin/fm-teardown.sh" "$id" >/dev/null 2>"$err"; then
+    fail "teardown exited 0 with a sourced sibling missing"
+  fi
+  [ -e "$fake/state/$id.meta" ] \
+    || fail "teardown removed the task record after a fatal source failure"
+  [ -e "$task_tmp" ] \
+    || fail "teardown removed the tasktmp dir after a fatal source failure"
+  grep -q "aborted before its task record was removed" "$err" \
+    || fail "teardown did not report the aborted teardown on stderr"
+  pass "fm-teardown exits non-zero and retains every record when a sourced sibling is missing"
+}
+
 test_teardown_removes_tasktmp_dir
 test_teardown_skips_gracefully_without_tasktmp
 test_teardown_skips_gracefully_when_dir_missing
+test_teardown_fails_loudly_when_a_sourced_sibling_is_missing
