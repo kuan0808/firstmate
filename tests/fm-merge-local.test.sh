@@ -76,31 +76,53 @@ test_dirty_worktree_refuses() {
   pass "tracked or untracked task dirt refuses before main moves"
 }
 
-test_wrong_branch_and_tip_refuse() {
+test_wrong_branch_and_foreign_repo_refuse() {
   local case_dir
   case_dir=$(make_case wrong-branch)
   commit_task_change "$case_dir"
   git -C "$case_dir/wt" checkout -q -b other
   assert_refused_unchanged "$case_dir" "expected 'fm/task-x1'"
 
-  case_dir=$(make_case wrong-tip)
+  # A second checkout of the same repo can carry fm/<id> at the identical SHA,
+  # so branch name and tip alone prove nothing about whose tree was inspected.
+  case_dir=$(make_case foreign-repo)
   commit_task_change "$case_dir"
   git clone -q "$case_dir/project" "$case_dir/impostor"
-  git -C "$case_dir/impostor" checkout -q -b fm/task-x1 main
+  git -C "$case_dir/impostor" checkout -q -b fm/task-x1 origin/fm/task-x1
+  [ "$(git -C "$case_dir/impostor" rev-parse HEAD)" = "$(git -C "$case_dir/project" rev-parse fm/task-x1)" ] \
+    || fail "the impostor checkout is not at the task branch tip, so this case proves nothing"
   awk -v wt="$case_dir/impostor" '
     /^worktree=/ { print "worktree=" wt; next }
     { print }
   ' "$case_dir/home/state/task-x1.meta" > "$case_dir/meta.tmp"
   mv "$case_dir/meta.tmp" "$case_dir/home/state/task-x1.meta"
-  assert_refused_unchanged "$case_dir" 'HEAD does not match'
-  pass "wrong task branch or branch-ref tip refuses before main moves"
+  assert_refused_unchanged "$case_dir" 'not an isolated task worktree'
+  pass "wrong task branch or a foreign same-named checkout refuses before main moves"
+}
+
+test_harness_artifacts_do_not_block_landing() {
+  local case_dir tip
+  case_dir=$(make_case harness-artifacts)
+  commit_task_change "$case_dir"
+  mkdir -p "$case_dir/wt/.claude"
+  printf '{}\n' > "$case_dir/wt/.claude/settings.local.json"
+  printf '{}\n' > "$case_dir/wt/.claude/other.json"
+  printf 'token=t\n' > "$case_dir/wt/.fm-grok-turnend"
+  tip=$(git -C "$case_dir/wt" rev-parse HEAD)
+  run_merge "$case_dir" >/dev/null \
+    || fail "firstmate's own harness artifacts blocked an approved landing"
+  [ "$(git -C "$case_dir/project" rev-parse main)" = "$tip" ] \
+    || fail "landing with harness artifacts present did not fast-forward main"
+  pass "firstmate-written harness artifacts are not crewmate dirt"
 }
 
 test_non_ship_and_divergence_refuse() {
   local case_dir
   case_dir=$(make_case non-ship)
   commit_task_change "$case_dir"
-  printf '\nkind=scout\n' >> "$case_dir/home/state/task-x1.meta"
+  fm_write_meta "$case_dir/home/state/task-x1.meta" \
+    "window=fake" "endpoint_task_id=task-x1" "worktree=$case_dir/wt" \
+    "project=$case_dir/project" "kind=scout" "mode=local-only" "yolo=off"
   assert_refused_unchanged "$case_dir" 'not a ship'
 
   case_dir=$(make_case diverged)
@@ -184,7 +206,8 @@ test_branch_advanced_during_validation_refuses() {
 test_clean_exact_tip_succeeds
 test_branch_actor_is_still_refused_first
 test_dirty_worktree_refuses
-test_wrong_branch_and_tip_refuse
+test_harness_artifacts_do_not_block_landing
+test_wrong_branch_and_foreign_repo_refuse
 test_non_ship_and_divergence_refuse
 test_branch_advanced_during_validation_refuses
 

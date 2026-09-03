@@ -64,16 +64,34 @@ git -C "$PROJ" rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null || { e
 
 DEFAULT=$(default_branch) || { echo "error: cannot determine default branch for $PROJ; expected origin/HEAD, main, or master" >&2; exit 1; }
 
+# The shared object store a checkout belongs to: two paths with the same value
+# are worktrees of one repository, so a same-named branch elsewhere is not this
+# task's evidence.
+common_git_dir() {
+  local d
+  d=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  [ -n "$d" ] || return 1
+  (cd "$d" && pwd -P)
+}
+
 # The recorded task worktree is the readiness evidence. Refuse if it cannot be
-# inspected as a distinct root, is not on the expected branch, has moved off the
-# shared branch ref, or still holds tracked or untracked work.
-[ -n "$WT" ] && [ -d "$WT" ] || { echo "error: task $ID has no inspectable recorded worktree at ${WT:-<missing>}" >&2; exit 1; }
+# inspected as a distinct root of this project's repository, is not on the
+# expected branch, has moved off the shared branch ref, or still holds work
+# firstmate did not write itself.
+if [ -z "$WT" ] || [ ! -d "$WT" ]; then
+  echo "error: task $ID has no inspectable recorded worktree at ${WT:-<missing>}" >&2
+  echo "Restore that worktree on $BRANCH (or point the task meta's worktree= at the checkout that holds it), then retry." >&2
+  exit 1
+fi
 WT_REAL=$(cd "$WT" && pwd -P) || { echo "error: cannot resolve task worktree $WT" >&2; exit 1; }
 PROJ_REAL=$(cd "$PROJ" && pwd -P) || { echo "error: cannot resolve project $PROJ" >&2; exit 1; }
 WT_TOP=$(git -C "$WT" rev-parse --show-toplevel 2>/dev/null || true)
 [ -n "$WT_TOP" ] || { echo "error: recorded worktree $WT is not an inspectable git worktree" >&2; exit 1; }
 WT_TOP_REAL=$(cd "$WT_TOP" && pwd -P) || { echo "error: cannot resolve recorded worktree root $WT_TOP" >&2; exit 1; }
-if [ "$WT_REAL" != "$WT_TOP_REAL" ] || [ "$WT_REAL" = "$PROJ_REAL" ]; then
+WT_COMMON=$(common_git_dir "$WT" || true)
+PROJ_COMMON=$(common_git_dir "$PROJ" || true)
+if [ "$WT_REAL" != "$WT_TOP_REAL" ] || [ "$WT_REAL" = "$PROJ_REAL" ] \
+  || [ -z "$WT_COMMON" ] || [ "$WT_COMMON" != "$PROJ_COMMON" ]; then
   echo "error: recorded worktree $WT is not an isolated task worktree for $PROJ" >&2
   exit 1
 fi
@@ -90,7 +108,11 @@ if ! task_status=$(git -C "$WT" status --porcelain 2>/dev/null); then
   echo "error: cannot inspect task worktree $WT for uncommitted changes" >&2
   exit 1
 fi
-if [ -n "$task_status" ]; then
+# firstmate writes its own harness wiring into the task worktree and only
+# best-effort excludes it (bin/fm-spawn.sh), so ignore exactly what the sibling
+# gate in bin/fm-teardown.sh ignores; everything else is the crewmate's work.
+task_dirt=$(printf '%s\n' "$task_status" | grep -vE '^\?\? (\.claude/|\.fm-(grok|kimi)-turnend$)' | head -1 || true)
+if [ -n "$task_dirt" ]; then
   echo "REFUSED: task worktree $WT has uncommitted or untracked changes; local main was not moved" >&2
   exit 1
 fi
