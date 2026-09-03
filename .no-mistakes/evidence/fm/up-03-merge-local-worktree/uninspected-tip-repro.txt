@@ -1,0 +1,24 @@
+################ BEFORE (base 5fb0ce7 bin/fm-merge-local.sh) ################
+== approved landing: readiness checks inspected fm/task-x1 @ a2c8dd7 ==
+merged fm/task-x1 into local main (3c82b0b -> 51a513b) in /tmp/fm-repro.IkFeLt/project
+   [exit 0]
+
+== crewmate's branch after the race ==
+   fm/task-x1  51a513b UNINSPECTED late commit
+
+== what local main now publishes ==
+   main        51a513b UNINSPECTED late commit
+   main        a2c8dd7 reviewed work
+   main        3c82b0b base
+
+################ AFTER (3e17282 bin/fm-merge-local.sh) ################
+== approved landing: readiness checks inspected fm/task-x1 @ e449862 ==
+REFUSED: fm/task-x1 advanced from e4498627a1b7ce55a6479d25bf6b8b77505d05be to 0d0051fa362c04d27e5358ad0c4487945cc552a7 while this landing was validating; local main was not moved
+Re-run this landing once the crewmate has stopped writing to fm/task-x1.
+   [exit 1]
+
+== crewmate's branch after the race ==
+   fm/task-x1  0d0051f UNINSPECTED late commit
+
+== what local main now publishes ==
+   main        e32de4d base

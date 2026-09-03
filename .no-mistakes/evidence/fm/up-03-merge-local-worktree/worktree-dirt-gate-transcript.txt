@@ -1,0 +1,17 @@
+=== CASE A: only firstmate's own harness files are untracked ===
+git status --porcelain in task worktree:
+   ?? .claude/
+   ?? .fm-grok-turnend
+$ bin/fm-merge-local.sh task-x1
+merged fm/task-x1 into local main (f6e4474 -> 3544fe3) in /tmp/fm-dirt.Wcu7VL/project
+   [exit 0]
+main now: 3544fe3 crewmate: reviewed work
+
+=== CASE B: the crewmate left real uncommitted work ===
+git status --porcelain in task worktree:
+   ?? notes.md
+$ bin/fm-merge-local.sh task-x1
+REFUSED: task worktree /tmp/fm-dirt.ncnhTM/wt has uncommitted or untracked changes; local main was not moved
+   [exit 1]
+main now: 6bafa4e base   (unmoved)
+crewmate file still on disk: yes

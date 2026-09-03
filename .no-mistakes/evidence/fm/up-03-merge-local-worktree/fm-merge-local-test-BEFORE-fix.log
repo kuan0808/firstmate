@@ -1,0 +1,3 @@
+ok - clean recorded ship worktree fast-forwards local main
+ok - the supervision-branch role partition still refuses local landing ahead of the readiness checks
+not ok - has uncommitted or untracked changes: expected exit 1, got 0

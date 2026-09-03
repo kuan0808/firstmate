@@ -1,0 +1,15 @@
+== task worktree state the readiness checks inspect ==
+   ?? .fm-grok-turnend
+   HEAD 62ed26f885f846162781cbd5f6ee542302a0fdb4
+
+== main before ==
+   0d4155d base
+
+$ bin/fm-merge-local.sh task-x1
+merged fm/task-x1 into local main (0d4155d -> 62ed26f) in /tmp/fm-happy.IdWS21/project
+   [exit 0]
+
+== main after: published tip == inspected tip? ==
+   62ed26f crewmate: reviewed work
+   0d4155d base
+   YES: local main == the exact commit the readiness checks inspected

@@ -1,0 +1,8 @@
+ok - clean recorded ship worktree fast-forwards local main
+ok - the supervision-branch role partition still refuses local landing ahead of the readiness checks
+ok - tracked or untracked task dirt refuses before main moves
+ok - firstmate-written harness artifacts are not crewmate dirt
+ok - wrong task branch or a foreign same-named checkout refuses before main moves
+ok - non-ship and divergent branch refuse before main moves
+ok - a task branch that advances during validation refuses instead of landing an uninspected commit
+# all fm-merge-local tests passed
