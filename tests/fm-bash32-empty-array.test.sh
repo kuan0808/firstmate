@@ -68,20 +68,32 @@ test_backlog_receive_accepts_an_outbox_with_no_keys_under_bash32() {
 }
 
 test_remote_home_seed_passes_its_project_loop_with_no_projects_under_bash32() {
-  local home err
-  home="$TMP_ROOT/seed-home"
-  mkdir -p "$home/data" "$home/state" "$home/config" "$home/projects"
+  local seed_home err ssh_stub reached rc
+  seed_home="$TMP_ROOT/seed-home"
+  mkdir -p "$seed_home/data" "$seed_home/state" "$seed_home/config" "$seed_home/projects"
 
   err="$TMP_ROOT/seed.err"
+  ssh_stub="$TMP_ROOT/offline-ssh"
+  reached="$TMP_ROOT/seed-reached-transport"
+  cat > "$ssh_stub" <<'SH'
+#!/usr/bin/env bash
+printf 'reached\n' > "$FM_TEST_SEED_REACHED"
+exit 255
+SH
+  chmod +x "$ssh_stub"
   set +e
-  FM_HOME="$home" FM_SECONDMATE_CHARTER='Own the build Mac.' \
+  FM_SSH_BIN="$ssh_stub" FM_TEST_SEED_REACHED="$reached" \
+    FM_HOME="$seed_home" FM_SECONDMATE_CHARTER='Own the build Mac.' \
     FM_SECONDMATE_SCOPE='remote build validation' \
     /bin/bash "$ROOT/bin/fm-remote-home-seed.sh" \
     ios remote-mac /remote/code /remote/home --no-projects \
     >/dev/null 2>"$err"
+  rc=$?
   set -e
-  # The seed cannot finish here: there is no remote host. It must still get
-  # PAST the per-project loop, which is the line this test pins.
+  # A recording transport refuses without any network operation. Reaching it
+  # proves the empty project loop actually ran, rather than failing earlier.
+  [ "$rc" -eq 1 ] || fail "the offline transport must leave provisioning unconfirmed"
+  assert_grep reached "$reached" "empty project seed never reached the transport after its loop"
   assert_no_grep 'unbound variable' "$err" \
     "seeding with --no-projects hit an unbound-variable crash under /bin/bash"
   assert_no_grep 'PROJECT_NAMES' "$err" \
