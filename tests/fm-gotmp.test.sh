@@ -53,17 +53,13 @@ make_fake_root() {
   mkdir -p "$fake/bin/backends" "$fake/state" "$fake/data"
   # Symlink the REAL teardown so the test exercises actual code, not a copy.
   ln -s "$TEARDOWN" "$fake/bin/fm-teardown.sh"
-  # fm-backend.sh + its tmux adapter: symlink the REAL files (teardown sources
-  # fm-backend.sh unconditionally, and dispatches the kill call through the
-  # tmux adapter; both are unchanged by this suite's fixture, just newly
-  # required siblings since the P1 backend extraction).
+  # fm-backend.sh is real, while its adapter is stubbed so this temp-cleanup
+  # test cannot depend on or mutate a host tmux server.
   ln -s "$ROOT/bin/fm-backend.sh" "$fake/bin/fm-backend.sh"
-  ln -s "$ROOT/bin/backends/tmux.sh" "$fake/bin/backends/tmux.sh"
+  cat > "$fake/bin/backends/tmux.sh" <<'SH'
+fm_backend_tmux_kill() { return 0; }
+SH
   ln -s "$ROOT/bin/fm-tmux-lib.sh" "$fake/bin/fm-tmux-lib.sh"
-  # fm-session-lock-lib.sh: the tmux adapter sources it at load time, so the
-  # teardown kill step dies with a fatal source error before the tasktmp
-  # removal unless the sibling is present.
-  ln -s "$ROOT/bin/fm-session-lock-lib.sh" "$fake/bin/fm-session-lock-lib.sh"
   ln -s "$ROOT/bin/fm-cursor-lib.sh" "$fake/bin/fm-cursor-lib.sh"
   ln -s "$ROOT/bin/fm-composer-lib.sh" "$fake/bin/fm-composer-lib.sh"
   ln -s "$ROOT/bin/fm-nm-run-lib.sh" "$fake/bin/fm-nm-run-lib.sh"
@@ -96,6 +92,9 @@ make_fake_root() {
   ln -s "$ROOT/bin/fm-pending-reply-lib.sh" "$fake/bin/fm-pending-reply-lib.sh"
   ln -s "$ROOT/bin/fm-marker-lib.sh" "$fake/bin/fm-marker-lib.sh"
   ln -s "$ROOT/bin/fm-operational-input.sh" "$fake/bin/fm-operational-input.sh"
+  # Ordinary teardown reports any final ledger outcome before removing records.
+  ln -s "$ROOT/bin/fm-inactive-reconcile.sh" "$fake/bin/fm-inactive-reconcile.sh"
+  ln -s "$ROOT/bin/fm-parent-channel-lib.sh" "$fake/bin/fm-parent-channel-lib.sh"
   # fm-guard.sh: stub (teardown calls it with `|| true`).
   cat > "$fake/bin/fm-guard.sh" <<'SH'
 #!/usr/bin/env bash
@@ -186,31 +185,67 @@ test_teardown_skips_gracefully_when_dir_missing() {
 }
 
 test_teardown_fails_loudly_when_a_sourced_sibling_is_missing() {
-  # A fatal `source` of a missing sibling (here the one the tmux adapter loads
-  # inside teardown's stderr-discarding kill call) aborts the script, and Bash
-  # then reports $? as 0 inside the EXIT trap. Teardown must still exit
-  # non-zero, say so on its real stderr, and leave every durable record in
-  # place rather than let the caller read a silent exit 0 as success.
+  # POSIX mode makes a missing sourced file fatal on modern Bash too. Default
+  # modern Bash can continue after that error inside a best-effort function;
+  # assuming it always aborts was the old Linux CI failure. The adapter stays
+  # stubbed so this regression never contacts a host tmux server.
   local id=td-nosib-z5
   local task_tmp="$TMP_ROOT/fm-$id"
   mkdir -p "$task_tmp/gotmp"
   local fake err
   fake=$(make_fake_root "$id" "$task_tmp")
-  rm "$fake/bin/fm-session-lock-lib.sh"
+  cat > "$fake/bin/backends/tmux.sh" <<'SH'
+# shellcheck source=/dev/null
+. "$FM_BACKEND_LIB_DIR/missing-sibling.sh"
+fm_backend_tmux_kill() { return 0; }
+SH
   err="$TMP_ROOT/$id.stderr"
-  if FM_HOME="$fake" bash "$fake/bin/fm-teardown.sh" "$id" >/dev/null 2>"$err"; then
+  if FM_HOME="$fake" bash --posix "$fake/bin/fm-teardown.sh" "$id" >/dev/null 2>"$err"; then
     fail "teardown exited 0 with a sourced sibling missing"
   fi
   [ -e "$fake/state/$id.meta" ] \
     || fail "teardown removed the task record after a fatal source failure"
   [ -e "$task_tmp" ] \
     || fail "teardown removed the tasktmp dir after a fatal source failure"
-  grep -q "aborted before its task record was removed" "$err" \
-    || fail "teardown did not report the aborted teardown on stderr"
   pass "fm-teardown exits non-zero and retains every record when a sourced sibling is missing"
+}
+
+test_teardown_rejects_zero_status_abort() {
+  # Pin the EXIT contract independently of the shell version's source-error
+  # status: an adapter that exits 0 before cleanup is still an aborted teardown.
+  local id=td-zero-z6 fake err task_tmp
+  task_tmp="$TMP_ROOT/fm-$id"
+  mkdir -p "$task_tmp/gotmp"
+  fake=$(make_fake_root "$id" "$task_tmp")
+  printf 'exit 0\n' > "$fake/bin/backends/tmux.sh"
+  err="$TMP_ROOT/$id.stderr"
+  if FM_HOME="$fake" bash "$fake/bin/fm-teardown.sh" "$id" >/dev/null 2>"$err"; then
+    fail "teardown accepted an exit 0 before cleanup"
+  fi
+  [ -e "$fake/state/$id.meta" ] || fail "zero-status abort removed the task record"
+  [ -d "$task_tmp/gotmp" ] || fail "zero-status abort removed task scratch"
+  grep -q "aborted before its task record was removed" "$err" \
+    || fail "zero-status abort did not reach the original stderr"
+  pass "fm-teardown rejects a zero-status abort and reports it on original stderr"
+}
+
+test_missing_adapter_returns_to_caller() {
+  local id=td-noadapter-z7 fake out
+  fake=$(make_fake_root "$id")
+  rm "$fake/bin/backends/tmux.sh"
+  out=$(FM_HOME="$fake" bash --posix -c '
+    . "$1/bin/fm-backend.sh"
+    if fm_backend_source tmux; then exit 1; fi
+    printf "adapter refused\n"
+  ' _ "$fake" 2>&1) || fail "missing adapter aborted instead of returning failure"
+  [ "$out" = 'adapter refused' ] || fail "missing adapter did not reach caller refusal"
+  [ -e "$fake/state/$id.meta" ] || fail "adapter probe removed task metadata"
+  pass "a missing adapter returns failure so the caller can refuse safely"
 }
 
 test_teardown_removes_tasktmp_dir
 test_teardown_skips_gracefully_without_tasktmp
 test_teardown_skips_gracefully_when_dir_missing
 test_teardown_fails_loudly_when_a_sourced_sibling_is_missing
+test_teardown_rejects_zero_status_abort
+test_missing_adapter_returns_to_caller
