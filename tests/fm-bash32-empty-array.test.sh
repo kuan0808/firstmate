@@ -92,7 +92,7 @@ SH
   set -e
   # A recording transport refuses without any network operation. Reaching it
   # proves the empty project loop actually ran, rather than failing earlier.
-  [ "$rc" -eq 1 ] || fail "the offline transport must leave provisioning unconfirmed"
+  [ "$rc" -eq 1 ] || fail "the offline transport must leave provisioning unconfirmed (exit $rc): $(cat "$err")"
   assert_grep reached "$reached" "empty project seed never reached the transport after its loop"
   assert_no_grep 'unbound variable' "$err" \
     "seeding with --no-projects hit an unbound-variable crash under /bin/bash"
