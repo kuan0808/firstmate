@@ -19,6 +19,10 @@
 # home with a backlog but no compatible tasks-axi refuses before cleanup.
 # None of this loosens the landed-work gates below: the transition runs only on
 # the paths that already proceed to remove the record.
+# An exit with status zero while the task record remains is an aborted teardown:
+# the EXIT guard returns failure and reports it on the original stderr, even if
+# the triggering call discarded stderr, without continuing cleanup.
+# tests/fm-gotmp.test.sh covers this guard and adapter-load failure retention.
 # The close - and only the close - is replaced by `tasks-axi reopen` with the
 # deliverable recorded while the backlog item is still an open captain call
 # (bin/fm-captain-hold.sh `open` owns that predicate), because the policy holds
@@ -75,7 +79,11 @@
 # is the approved discard path that prevalidates child removal targets, locks each
 # descendant home's task set before enumeration, and holds those locks through
 # child cleanup. Contention refuses the complete forced teardown before child
-# mutation. Local and remote retirement serialize their destructive phase with
+# mutation. Required child adapters are loaded recursively before child cleanup;
+# unavailable adapters or fatal source exits preserve parent and child metadata,
+# work, and scratch. After successful loading, endpoint kills keep their existing
+# best-effort behavior and Herdr's exact-pane disappearance requirement.
+# Local and remote retirement serialize their destructive phase with
 # that mate's backlog-handoff lock under the registry lock. Pending handoff wake
 # state is retired with the home, and local removal failure restores that state
 # before preserving the route for retry. Teardown then discards child work, kills
@@ -274,13 +282,8 @@ teardown_release_locks() {
     CONTROL_LOCK_HELD=0
   fi
   fm_lease_guard_release || true
-  # Bash reports $? as 0 inside this trap after a fatal shell error such as a
-  # failed `source` of a missing sibling, so returning it as-is would turn that
-  # abort into a silent exit 0 that callers read as success. Every path that
-  # legitimately exits 0 has already removed the task record, so a record that
-  # is still present at exit 0 is the one signature of an aborted teardown.
-  # The message goes to the stderr saved below because the abort may happen
-  # inside a call whose own stderr is deliberately discarded.
+  # A fatal source error can leave $? at 0 on Bash 3.2, just like an explicit
+  # exit 0. Descriptor 3 survives best-effort callers redirecting their stderr.
   if [ "$status" -eq 0 ] && { [ -e "$STATE/$ID.meta" ] || [ -L "$STATE/$ID.meta" ]; }; then
     echo "error: teardown of $ID aborted before its task record was removed; every durable record is retained" >&3
     exit 1
