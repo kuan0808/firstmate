@@ -195,18 +195,21 @@ test_teardown_fails_loudly_when_a_sourced_sibling_is_missing() {
   local fake err
   fake=$(make_fake_root "$id" "$task_tmp")
   cat > "$fake/bin/backends/tmux.sh" <<'SH'
+: > "$FM_HOME/sibling-source-reached"
+set -o posix
 # shellcheck source=/dev/null
 . "$FM_BACKEND_LIB_DIR/missing-sibling.sh"
 fm_backend_tmux_kill() { return 0; }
 SH
   err="$TMP_ROOT/$id.stderr"
-  if FM_HOME="$fake" bash --posix "$fake/bin/fm-teardown.sh" "$id" >/dev/null 2>"$err"; then
+  if FM_HOME="$fake" bash "$fake/bin/fm-teardown.sh" "$id" >/dev/null 2>"$err"; then
     fail "teardown exited 0 with a sourced sibling missing"
   fi
   [ -e "$fake/state/$id.meta" ] \
     || fail "teardown removed the task record after a fatal source failure"
   [ -e "$task_tmp" ] \
     || fail "teardown removed the tasktmp dir after a fatal source failure"
+  [ -e "$fake/sibling-source-reached" ] || fail "teardown did not reach the missing sibling"
   pass "fm-teardown exits non-zero and retains every record when a sourced sibling is missing"
 }
 
@@ -243,9 +246,106 @@ test_missing_adapter_returns_to_caller() {
   pass "a missing adapter returns failure so the caller can refuse safely"
 }
 
+test_forced_parent_preflights_child_adapters() {
+  local mode id fake home task_tmp child_wt child_tmp err log path
+  for mode in missing-sibling missing-adapter zero-exit kill-failure success; do
+    id="td-child-$mode"
+    task_tmp="$TMP_ROOT/fm-$id"
+    home="$TMP_ROOT/home-$id"
+    child_wt="$TMP_ROOT/work-$id"
+    child_tmp="$home/tasktmp"
+    mkdir -p "$task_tmp/gotmp" "$home/state" "$child_tmp/gotmp" "$child_wt"
+    fake=$(make_fake_root "$id" "$task_tmp")
+    printf '%s\n' "$id" > "$home/.fm-secondmate-home"
+    printf 'parent work\n' > "$home/work-note"
+    printf 'parent scratch\n' > "$task_tmp/gotmp/artifact"
+    printf 'child scratch\n' > "$child_tmp/gotmp/artifact"
+    git -C "$child_wt" init -q || fail "child fixture git init failed"
+    git -C "$child_wt" -c user.name=Test -c user.email=test@example.invalid \
+      -c commit.gpgsign=false commit -q --allow-empty -m fixture \
+      || fail "child fixture commit failed"
+    printf 'child work\n' > "$child_wt/work-note"
+    cat > "$fake/state/$id.meta" <<META
+window=fakeses:fm-$id
+worktree=$home
+home=$home
+project=$TMP_ROOT/nonexistent-project-$id
+kind=secondmate
+tasktmp=$task_tmp
+META
+    cat > "$home/state/child-z.meta" <<META
+backend=zellij
+window=fakeses:1
+zellij_session=fakeses
+zellij_tab_id=1
+zellij_pane_id=1
+endpoint_task_id=child-z
+worktree=$child_wt
+project=$child_wt
+kind=ship
+mode=local-only
+tasktmp=$child_tmp
+META
+    cp "$fake/state/$id.meta" "$fake/parent.meta.before"
+    cp "$home/state/child-z.meta" "$fake/child.meta.before"
+    : > "$fake/bin/backends/zellij.sh"
+    if [ "$mode" = missing-sibling ]; then
+      printf 'set -o posix\n' >> "$fake/bin/backends/zellij.sh"
+    fi
+    cat >> "$fake/bin/backends/zellij.sh" <<'SH'
+. "$FM_BACKEND_LIB_DIR/fm-backend-hometag-lib.sh"
+fm_backend_zellij_kill() {
+  printf '%s\n' "$FM_HOME" "$FM_ROOT" "$@" >> "$TEST_CHILD_KILL_LOG"
+  return "$TEST_CHILD_KILL_RC"
+}
+SH
+    case "$mode" in
+      missing-sibling) ;;
+      missing-adapter) rm "$fake/bin/backends/zellij.sh" ;;
+      zero-exit) printf 'exit 0\n' > "$fake/bin/fm-backend-hometag-lib.sh" ;;
+      *) : > "$fake/bin/fm-backend-hometag-lib.sh" ;;
+    esac
+    printf '#!/usr/bin/env bash\nexit 1\n' > "$fake/bin/treehouse"
+    chmod +x "$fake/bin/treehouse"
+    err="$fake/teardown.stderr"
+    log="$fake/child-kill.log"
+    local kill_rc=0 rc=0
+    [ "$mode" != kill-failure ] || kill_rc=1
+    FM_HOME="$fake" PATH="$fake/bin:$PATH" TEST_CHILD_KILL_LOG="$log" TEST_CHILD_KILL_RC="$kill_rc" \
+      bash "$fake/bin/fm-teardown.sh" "$id" --force > "$fake/teardown.stdout" 2>"$err" || rc=$?
+    case "$mode" in
+      missing-sibling|missing-adapter|zero-exit)
+        [ "$rc" -ne 0 ] || fail "$mode: forced parent teardown accepted child adapter failure"
+        cmp -s "$fake/state/$id.meta" "$fake/parent.meta.before" || fail "$mode: parent record changed"
+        cmp -s "$home/state/child-z.meta" "$fake/child.meta.before" || fail "$mode: child record changed"
+        [ "$(cat "$home/work-note")" = 'parent work' ] || fail "$mode: parent work changed"
+        [ "$(cat "$child_wt/work-note")" = 'child work' ] || fail "$mode: child work changed"
+        [ "$(cat "$task_tmp/gotmp/artifact")" = 'parent scratch' ] || fail "$mode: parent scratch changed"
+        [ "$(cat "$child_tmp/gotmp/artifact")" = 'child scratch' ] || fail "$mode: child scratch changed"
+        [ ! -e "$log" ] || fail "$mode: child kill ran before preflight completed"
+        case "$mode" in
+          missing-sibling) grep -q 'fm-backend-hometag-lib.sh' "$err" || fail "missing sibling diagnostic absent: $(cat "$err")" ;;
+          missing-adapter) grep -q 'REFUSED: zellij adapter is unavailable for child child-z' "$err" || fail "missing adapter refusal absent: $(cat "$err")" ;;
+          zero-exit) grep -q 'aborted before its task record was removed' "$err" || fail "zero-status abort diagnostic absent: $(cat "$err")" ;;
+        esac
+        ;;
+      *)
+        [ "$rc" -eq 0 ] || { cat "$err" >&2; fail "$mode: forced parent teardown failed"; }
+        for path in "$fake/state/$id.meta" "$home" "$child_wt" "$task_tmp"; do
+          [ ! -e "$path" ] || fail "$mode: cleanup retained $path"
+        done
+        printf '%s\n' "$home" "$home" fakeses:1 1 fm-child-z > "$fake/expected-kill.log"
+        cmp -s "$log" "$fake/expected-kill.log" || fail "$mode: child kill lost its owning home or endpoint"
+        ;;
+    esac
+    pass "forced parent child-adapter preflight: $mode"
+  done
+}
+
 test_teardown_removes_tasktmp_dir
 test_teardown_skips_gracefully_without_tasktmp
 test_teardown_skips_gracefully_when_dir_missing
 test_teardown_fails_loudly_when_a_sourced_sibling_is_missing
 test_teardown_rejects_zero_status_abort
 test_missing_adapter_returns_to_caller
+test_forced_parent_preflights_child_adapters

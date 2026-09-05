@@ -2507,7 +2507,7 @@ $session	$lock_path"
   return 1
 }
 
-preflight_firstmate_home_herdr_children() {  # <home>
+preflight_firstmate_home_backend_children() {  # <home>
   local home=$1 sub_state child_meta child_id child_backend child_target child_kind child_home child_wt
   sub_state="$home/state"
   [ -d "$sub_state" ] || return 0
@@ -2519,6 +2519,9 @@ preflight_firstmate_home_herdr_children() {  # <home>
     child_target=$FM_BACKEND_VALIDATED_TARGET
     if [ "$child_backend" = herdr ]; then
       teardown_herdr_preflight_target "$child_target" "$child_id" || return 1
+    elif ! fm_backend_source "$child_backend"; then
+      echo "REFUSED: $child_backend adapter is unavailable for child $child_id; forced teardown changed nothing" >&2
+      return 1
     fi
     child_kind=$(meta_value "$child_meta" kind)
     [ -n "$child_kind" ] || child_kind=ship
@@ -2526,7 +2529,7 @@ preflight_firstmate_home_herdr_children() {  # <home>
       child_wt=$(meta_value "$child_meta" worktree)
       child_home=$(meta_value "$child_meta" home)
       [ -n "$child_home" ] || child_home=$child_wt
-      preflight_firstmate_home_herdr_children "$child_home" || return 1
+      preflight_firstmate_home_backend_children "$child_home" || return 1
     fi
   done
 }
@@ -2659,7 +2662,7 @@ if [ "$KIND" = secondmate ]; then
     if [ "$BACKEND" = herdr ]; then
       teardown_herdr_preflight_target "$T" "$ID" || exit 1
     fi
-    preflight_firstmate_home_herdr_children "$HOME_PATH" || exit 1
+    preflight_firstmate_home_backend_children "$HOME_PATH" || exit 1
   fi
 fi
 
