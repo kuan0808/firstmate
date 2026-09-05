@@ -3749,10 +3749,17 @@ JS
   # Exactly one wave row means the sprite reflowed rather than wrapping onto extra rows.
   [ "$(grep -c -F '\__/' "$boat_resized_snapshot")" -eq 1 ] \
     || fail "the working ship wrapped onto more than one water row after the resize"
-  while IFS= read -r boat_line; do
-    [ "${#boat_line}" -le 100 ] \
-      || fail "a rendered line was ${#boat_line} cells after resizing to 100 columns"
-  done <"$boat_resized_snapshot"
+  PI_PACKAGE_DIR="$PI_PACKAGE_DIR" node --input-type=module - "$boat_resized_snapshot" <<'JS' || fail "a rendered line exceeded 100 cells after resizing"
+import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+const { visibleWidth } = await import(pathToFileURL(
+  `${process.env.PI_PACKAGE_DIR}/node_modules/@earendil-works/pi-tui/dist/index.js`,
+).href);
+for (const line of readFileSync(process.argv[2], "utf8").split("\n")) {
+  const width = visibleWidth(line);
+  if (width > 100) throw new Error(`a rendered line was ${width} cells after resizing to 100 columns`);
+}
+JS
   boat_column_one=$(awk 'index($0,"\\__/"){print index($0,"\\__/"); exit}' "$boat_resized_snapshot")
   [ "$boat_column_one" -le 97 ] \
     || fail "the working ship hull started at column $boat_column_one and cannot fit in 100 columns"
