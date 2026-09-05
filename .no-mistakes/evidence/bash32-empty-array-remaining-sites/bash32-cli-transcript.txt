@@ -1,0 +1,215 @@
+GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
+
+base f09de8a3d3a550b13b4d535346fbc7b9ac0d6c19: empty backlog receive
+$ /bin/bash bin/fm-backlog-receive.sh state/handoff/ios.outbox.md <bytes> <sha256> 1
+exit=0
+stdout: 
+stderr: <repo>/.test-intent-bash32/base/bin/fm-backlog-receive.sh: line 147: KEYS[@]: unbound variable
+delivered scratch exists=True
+
+base f09de8a3d3a550b13b4d535346fbc7b9ac0d6c19: nonempty backlog receive
+$ /bin/bash bin/fm-backlog-receive.sh state/handoff/ios.outbox.md <bytes> <sha256> 1
+exit=0
+stdout: received: ios moved=2 already=0
+stderr: 
+delivered scratch exists=False
+persisted data/backlog.md:
+## In flight
+
+## Queued
+- [ ] sample-a - Preserve a queued task
+- [ ] sample-b - Preserve another task
+
+## Done
+
+identical retry: exit=0; received: ios moved=0 already=2; delivered scratch exists=False
+
+base f09de8a3d3a550b13b4d535346fbc7b9ac0d6c19: seed no-projects
+$ /bin/bash bin/fm-remote-home-seed.sh ios remote-mac /remote/code /remote/home --no-projects
+exit=0
+stderr: <repo>/.test-intent-bash32/base/bin/fm-remote-home-seed.sh: line 190: PROJECT_NAMES[@]: unbound variable
+offline SSH reached=False
+
+base f09de8a3d3a550b13b4d535346fbc7b9ac0d6c19: seed explicit-projects
+$ /bin/bash bin/fm-remote-home-seed.sh ios remote-mac /remote/code /remote/home alpha=https://example.invalid/alpha.git beta=https://example.invalid/beta.git
+exit=1
+stderr: error: remote readiness completion is unknown; route and brief preserved for same-host reconciliation
+offline SSH reached=True
+recorded SSH argv (stub exits 255 without network):
+-o
+ForwardAgent=no
+-o
+ClearAllForwardings=yes
+-o
+SendEnv=-*
+-o
+ServerAliveInterval=15
+-o
+ServerAliveCountMax=3
+--
+remote-mac
+fm-remote-entrypoint.sh
+1
+L3JlbW90ZS9jb2Rl
+L3JlbW90ZS9ob21l
+Zm0tcmVtb3RlLWRvY3Rvci5zaAA=
+
+persisted route after unknown transport completion:
+- ios - Own the build Mac. (host: remote-mac; root: /remote/code; home: /remote/home; scope: remote build validation; projects: alpha, beta; added 2026-09-05)
+
+
+target cff67f8b0031221a2897fed94b73846f3a3d3f76: empty backlog receive
+$ /bin/bash bin/fm-backlog-receive.sh state/handoff/ios.outbox.md <bytes> <sha256> 1
+exit=0
+stdout: received: ios moved=0 already=0
+stderr: 
+delivered scratch exists=False
+persisted data/backlog.md:
+## In flight
+
+## Queued
+
+## Done
+
+
+target cff67f8b0031221a2897fed94b73846f3a3d3f76: nonempty backlog receive
+$ /bin/bash bin/fm-backlog-receive.sh state/handoff/ios.outbox.md <bytes> <sha256> 1
+exit=0
+stdout: received: ios moved=2 already=0
+stderr: 
+delivered scratch exists=False
+persisted data/backlog.md:
+## In flight
+
+## Queued
+- [ ] sample-a - Preserve a queued task
+- [ ] sample-b - Preserve another task
+
+## Done
+
+identical retry: exit=0; received: ios moved=0 already=2; delivered scratch exists=False
+
+target cff67f8b0031221a2897fed94b73846f3a3d3f76: seed no-projects
+$ /bin/bash bin/fm-remote-home-seed.sh ios remote-mac /remote/code /remote/home --no-projects
+exit=1
+stderr: error: remote readiness completion is unknown; route and brief preserved for same-host reconciliation
+offline SSH reached=True
+recorded SSH argv (stub exits 255 without network):
+-o
+ForwardAgent=no
+-o
+ClearAllForwardings=yes
+-o
+SendEnv=-*
+-o
+ServerAliveInterval=15
+-o
+ServerAliveCountMax=3
+--
+remote-mac
+fm-remote-entrypoint.sh
+1
+L3JlbW90ZS9jb2Rl
+L3JlbW90ZS9ob21l
+Zm0tcmVtb3RlLWRvY3Rvci5zaAA=
+
+persisted route after unknown transport completion:
+- ios - Own the build Mac. (host: remote-mac; root: /remote/code; home: /remote/home; scope: remote build validation; projects: ; added 2026-09-05)
+
+
+target cff67f8b0031221a2897fed94b73846f3a3d3f76: seed explicit-projects
+$ /bin/bash bin/fm-remote-home-seed.sh ios remote-mac /remote/code /remote/home alpha=https://example.invalid/alpha.git beta=https://example.invalid/beta.git
+exit=1
+stderr: error: remote readiness completion is unknown; route and brief preserved for same-host reconciliation
+offline SSH reached=True
+recorded SSH argv (stub exits 255 without network):
+-o
+ForwardAgent=no
+-o
+ClearAllForwardings=yes
+-o
+SendEnv=-*
+-o
+ServerAliveInterval=15
+-o
+ServerAliveCountMax=3
+--
+remote-mac
+fm-remote-entrypoint.sh
+1
+L3JlbW90ZS9jb2Rl
+L3JlbW90ZS9ob21l
+Zm0tcmVtb3RlLWRvY3Rvci5zaAA=
+
+persisted route after unknown transport completion:
+- ios - Own the build Mac. (host: remote-mac; root: /remote/code; home: /remote/home; scope: remote build validation; projects: alpha, beta; added 2026-09-05)
+
+
+Actual macOS CI empty-array block (parsed from workflow YAML):
+ok - backlog receive accepts an outbox with no keys under /bin/bash
+ok - remote home seed passes its project loop with no projects under /bin/bash
+# all fm-bash32-empty-array tests passed
+exit=0
+
+
+Both independent empty-array failures reproduced on the exact base. Target receipts and retries succeed; empty and explicit-project seed calls reach the offline transport and preserve the route on an unknown completion. No real host was contacted.
+
+Existing regression independently against exact base: test_backlog_receive_accepts_an_outbox_with_no_keys_under_bash32
+exit=1
+not ok - receiving an outbox with no keys hit an unbound-variable crash under /bin/bash
+
+
+Existing regression independently against exact base: test_remote_home_seed_passes_its_project_loop_with_no_projects_under_bash32
+exit=1
+not ok - the offline transport must leave provisioning unconfirmed (exit 0): <repo>/.test-intent-bash32/base/bin/fm-remote-home-seed.sh: line 190: PROJECT_NAMES[@]: unbound variable
+
+
+base: successful seed CLI with controlled offline replies; project_count=2
+exit=0
+ok: controlled offline provisioning response
+home=remote-mac:/remote/home
+
+Decoded emitted provisioning project records:
+[
+  [
+    "alpha",
+    "https://example.invalid/alpha.git",
+    "- alpha [direct-PR] - Alpha (added 2026-09-05)",
+    "direct-PR"
+  ],
+  [
+    "beta",
+    "https://example.invalid/beta.git",
+    "- beta [no-mistakes] - Beta (added 2026-09-05)",
+    "no-mistakes"
+  ]
+]
+
+target: successful seed CLI with controlled offline replies; project_count=0
+exit=0
+ok: controlled offline provisioning response
+home=remote-mac:/remote/home
+
+Decoded emitted provisioning project records:
+[]
+
+target: successful seed CLI with controlled offline replies; project_count=2
+exit=0
+ok: controlled offline provisioning response
+home=remote-mac:/remote/home
+
+Decoded emitted provisioning project records:
+[
+  [
+    "alpha",
+    "https://example.invalid/alpha.git",
+    "- alpha [direct-PR] - Alpha (added 2026-09-05)",
+    "direct-PR"
+  ],
+  [
+    "beta",
+    "https://example.invalid/beta.git",
+    "- beta [no-mistakes] - Beta (added 2026-09-05)",
+    "no-mistakes"
+  ]
+]
