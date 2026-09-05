@@ -1,0 +1,99 @@
+ok - fm-teardown removes the dir pointed to by tasktmp= in meta
+ok - fm-teardown skips gracefully when tasktmp= is absent (backward compat)
+ok - fm-teardown skips gracefully when tasktmp= points to a nonexistent dir
+ok - fm-teardown exits non-zero and retains every record when a sourced sibling is missing
+ok - fm-teardown rejects a zero-status abort and reports it on original stderr
+ok - a missing adapter returns failure so the caller can refuse safely
+ok - forced parent child-adapter preflight: missing-sibling
+ok - forced parent child-adapter preflight: missing-adapter
+ok - forced parent child-adapter preflight: zero-exit
+ok - forced parent child-adapter preflight: kill-failure
+ok - forced parent child-adapter preflight: success
+
+CLI evidence: 3.2.57(1)-release
+Real teardown/backend dispatch; fake adapters and orphan reaper; no live fleet.
+
+$ FM_HOME=<fixture> bash bin/fm-teardown.sh td-child-missing-sibling --force
+Fixture condition: missing-sibling
+/var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T/fm-gotmp-tests.LW4oDS/td-child-missing-sibling/bin/backends/zellij.sh: line 2: /var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T/fm-gotmp-tests.LW4oDS/td-child-missing-sibling/bin/fm-backend-hometag-lib.sh: No such file or directory
+error: teardown of td-child-missing-sibling aborted before its task record was removed; every durable record is retained
+Observed retry exit status: 1
+Parent metadata: byte-identical; child metadata: byte-identical
+home-td-child-missing-sibling/work-note: parent work
+work-td-child-missing-sibling/work-note: child work
+fm-td-child-missing-sibling/gotmp/artifact: parent scratch
+home-td-child-missing-sibling/tasktmp/gotmp/artifact: child scratch
+Child endpoint kill was not invoked.
+
+$ FM_HOME=<fixture> bash bin/fm-teardown.sh td-child-missing-adapter --force
+Fixture condition: missing-adapter
+REFUSED: zellij adapter is unavailable for child child-z; forced teardown changed nothing
+Observed retry exit status: 1
+Parent metadata: byte-identical; child metadata: byte-identical
+home-td-child-missing-adapter/work-note: parent work
+work-td-child-missing-adapter/work-note: child work
+fm-td-child-missing-adapter/gotmp/artifact: parent scratch
+home-td-child-missing-adapter/tasktmp/gotmp/artifact: child scratch
+Child endpoint kill was not invoked.
+
+$ FM_HOME=<fixture> bash bin/fm-teardown.sh td-child-zero-exit --force
+Fixture condition: zero-exit
+error: teardown of td-child-zero-exit aborted before its task record was removed; every durable record is retained
+Observed retry exit status: 1
+Parent metadata: byte-identical; child metadata: byte-identical
+home-td-child-zero-exit/work-note: parent work
+work-td-child-zero-exit/work-note: child work
+fm-td-child-zero-exit/gotmp/artifact: parent scratch
+home-td-child-zero-exit/tasktmp/gotmp/artifact: child scratch
+Child endpoint kill was not invoked.
+
+$ FM_HOME=<fixture> bash bin/fm-teardown.sh td-child-kill-failure --force
+Fixture condition: kill-failure
+teardown td-child-kill-failure complete (window fakeses:fm-td-child-kill-failure, worktree /var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/home-td-child-kill-failure)
+/var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/td-child-kill-failure/bin/fm-teardown.sh: line 3022: /var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T/fm-gotmp-tests.LW4oDS/td-child-kill-failure/bin/fm-home-summary-refresh.sh: No such file or directory
+Removed: td-child-kill-failure/state/td-child-kill-failure.meta
+Removed: home-td-child-kill-failure
+Removed: work-td-child-kill-failure
+Removed: fm-td-child-kill-failure
+Child kill received owning home twice, target, tab, label:
+/var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/home-td-child-kill-failure
+/var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/home-td-child-kill-failure
+fakeses:1
+1
+fm-child-z
+
+$ FM_HOME=<fixture> bash bin/fm-teardown.sh td-child-success --force
+Fixture condition: success
+teardown td-child-success complete (window fakeses:fm-td-child-success, worktree /var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/home-td-child-success)
+/var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/td-child-success/bin/fm-teardown.sh: line 3022: /var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T/fm-gotmp-tests.LW4oDS/td-child-success/bin/fm-home-summary-refresh.sh: No such file or directory
+Removed: td-child-success/state/td-child-success.meta
+Removed: home-td-child-success
+Removed: work-td-child-success
+Removed: fm-td-child-success
+Child kill received owning home twice, target, tab, label:
+/var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/home-td-child-success
+/var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/home-td-child-success
+fakeses:1
+1
+fm-child-z
+
+Original stderr survives the best-effort kill redirection:
+error: teardown of td-zero-z6 aborted before its task record was removed; every durable record is retained
+
+Missing and unreadable adapters return to the caller (Bash POSIX mode):
+missing adapter: source returned 1; caller emits REFUSED and continues
+unreadable adapter: source returned 1; caller emits REFUSED and continues
+
+Before/after reproduction of zero-status abort using identical fixture:
+base exit status: 0
+Metadata byte-identical; scratch retained.
+target exit status: 1
+error: teardown of evidence-before-after aborted before its task record was removed; every durable record is retained
+Metadata byte-identical; scratch retained.
+
+Pre-fix forced mixed-backend regression (expected test failure):
+not ok - missing-sibling: forced parent teardown accepted child adapter failure
+Pre-fix regression exit status: 1 (failure reproduced).
+
+Current target: all asserted CLI and state contracts satisfied on Bash 3.2.
+Linux/modern Bash remains owned by hosted CI; not exercised locally.
