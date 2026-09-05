@@ -19,9 +19,12 @@
 # home with a backlog but no compatible tasks-axi refuses before cleanup.
 # None of this loosens the landed-work gates below: the transition runs only on
 # the paths that already proceed to remove the record.
-# An exit with status zero while the task record remains is an aborted teardown:
+# An exit with status zero before this invocation confirms task-record removal
+# is an aborted teardown:
 # the EXIT guard returns failure and reports it on the original stderr, even if
 # the triggering call discarded stderr, without continuing cleanup.
+# Local and remote completion record that removal while holding the meta lock,
+# so replacement metadata published afterward does not cause a false abort.
 # tests/fm-gotmp.test.sh covers this guard and adapter-load failure retention.
 # The close - and only the close - is replaced by `tasks-axi reopen` with the
 # deliverable recorded while the backlog item is still an open captain call
