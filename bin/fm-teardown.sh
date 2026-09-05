@@ -270,6 +270,7 @@ CONTROL_LOCK="$STATE/.control-$ID.lock"
 CONTROL_LOCK_HELD=0
 META_LOCK=
 META_LOCK_HELD=0
+TEARDOWN_RECORD_REMOVED=0
 DESCENDANT_LOCK_PATHS=()
 DESCENDANT_TASK_STATES=()
 DESCENDANT_TASK_IDS=()
@@ -307,7 +308,7 @@ teardown_release_locks() {
   fm_lease_guard_release || true
   # A fatal source error can leave $? at 0 on Bash 3.2, just like an explicit
   # exit 0. Descriptor 3 survives best-effort callers redirecting their stderr.
-  if [ "$status" -eq 0 ] && { [ -e "$STATE/$ID.meta" ] || [ -L "$STATE/$ID.meta" ]; }; then
+  if [ "$status" -eq 0 ] && [ "$TEARDOWN_RECORD_REMOVED" != 1 ]; then
     echo "error: teardown of $ID aborted before its task record was removed; every durable record is retained" >&3
     exit 1
   fi
@@ -793,6 +794,7 @@ remote_secondmate_teardown() {
   mv -f -- "$tmp" "$SECONDMATE_REG"
   status_retire_presentation_task "$STATE" "$ID" || return 1
   fm_backlog_atomic_transition remove "$STATE/$ID.meta" "task record" "$STATE" || return 1
+  TEARDOWN_RECORD_REMOVED=1
   rm -f -- "$STATE/$ID.turn-ended"
   printf 'teardown %s complete (remote %s:%s)\n' "$ID" "$remote_host" "$remote_home"
   return 0
@@ -3153,6 +3155,7 @@ else
     exit 1
   fi
 fi
+TEARDOWN_RECORD_REMOVED=1
 fm_lock_release "$META_LOCK"
 META_LOCK_HELD=0
 if [ "$KIND" != scout ] && [ "$KIND" != secondmate ] && [ "$MODE" != local-only ]; then

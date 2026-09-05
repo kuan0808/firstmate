@@ -159,6 +159,42 @@ test_teardown_removes_tasktmp_dir() {
   pass "fm-teardown removes the dir pointed to by tasktmp= in meta"
 }
 
+test_teardown_preserves_replacement_record() {
+  local id=td-replacement-z8 fake task_tmp rc=0
+  task_tmp="$TMP_ROOT/fm-$id"
+  mkdir -p "$task_tmp/gotmp"
+  fake=$(make_fake_root "$id" "$task_tmp")
+  cp "$fake/state/$id.meta" "$fake/replacement.meta"
+  printf 'spawn_gen=replacement\n' >> "$fake/replacement.meta"
+  cat > "$fake/bin/fm-fleet-sync.sh" <<'SH'
+#!/usr/bin/env bash
+set -eu
+. "$FM_HOME/bin/fm-wake-lib.sh"
+meta="$FM_HOME/state/$TEST_REPLACEMENT_ID.meta"
+lock=$(fm_meta_lock_path "$meta")
+fm_lock_try_acquire "$lock"
+trap 'fm_lock_release "$lock"' EXIT
+[ ! -e "$meta" ] && [ ! -L "$meta" ]
+[ ! -e "$TEST_ORIGINAL_TASKTMP" ]
+cp "$FM_HOME/replacement.meta" "$meta"
+SH
+  FM_HOME="$fake" TEST_REPLACEMENT_ID="$id" TEST_ORIGINAL_TASKTMP="$task_tmp" \
+    bash "$fake/bin/fm-teardown.sh" "$id" >"$fake/teardown.stdout" 2>"$fake/teardown.stderr" || rc=$?
+  cmp -s "$fake/replacement.meta" "$fake/state/$id.meta" \
+    || fail "post-cleanup replacement metadata was not published or preserved"
+  [ ! -e "$task_tmp" ] || fail "original task scratch survived cleanup"
+  [ "$rc" -eq 0 ] || {
+    cat "$fake/teardown.stderr" >&2
+    fail "teardown rejected replacement metadata after successful cleanup"
+  }
+  grep -q "teardown $id complete" "$fake/teardown.stdout" \
+    || fail "original teardown did not report completion"
+  if grep -q 'aborted before its task record was removed' "$fake/teardown.stderr"; then
+    fail "completed teardown reported a false abort"
+  fi
+  pass "fm-teardown succeeds and preserves replacement metadata published after cleanup"
+}
+
 test_teardown_skips_gracefully_without_tasktmp() {
   # Backward compat: a meta from a pre-fix task has no tasktmp= line. Teardown must
   # not error and must not remove anything.
@@ -345,6 +381,7 @@ SH
 }
 
 test_teardown_removes_tasktmp_dir
+test_teardown_preserves_replacement_record
 test_teardown_skips_gracefully_without_tasktmp
 test_teardown_skips_gracefully_when_dir_missing
 test_teardown_fails_loudly_when_a_sourced_sibling_is_missing
