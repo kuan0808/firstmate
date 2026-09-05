@@ -1,0 +1,13 @@
+ok - fm-teardown removes the dir pointed to by tasktmp= in meta
+ok - fm-teardown succeeds and preserves replacement metadata published after cleanup
+ok - fm-teardown skips gracefully when tasktmp= is absent (backward compat)
+ok - fm-teardown skips gracefully when tasktmp= points to a nonexistent dir
+ok - fm-teardown exits non-zero and retains every record when a sourced sibling is missing
+ok - fm-teardown rejects a zero-status abort and reports it on original stderr
+ok - a missing adapter returns failure so the caller can refuse safely
+ok - forced parent child-adapter preflight: missing-sibling
+ok - forced parent child-adapter preflight: missing-adapter
+ok - forced parent child-adapter preflight: zero-exit
+ok - forced parent child-adapter preflight: kill-failure
+ok - forced parent child-adapter preflight: success
+unreadable adapter refused by caller

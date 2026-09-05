@@ -1,99 +1,155 @@
-ok - fm-teardown removes the dir pointed to by tasktmp= in meta
-ok - fm-teardown skips gracefully when tasktmp= is absent (backward compat)
-ok - fm-teardown skips gracefully when tasktmp= points to a nonexistent dir
-ok - fm-teardown exits non-zero and retains every record when a sourced sibling is missing
-ok - fm-teardown rejects a zero-status abort and reports it on original stderr
-ok - a missing adapter returns failure so the caller can refuse safely
-ok - forced parent child-adapter preflight: missing-sibling
-ok - forced parent child-adapter preflight: missing-adapter
-ok - forced parent child-adapter preflight: zero-exit
-ok - forced parent child-adapter preflight: kill-failure
-ok - forced parent child-adapter preflight: success
+Hermetic CLI evidence; no live fleet/backend lifecycle.
+Target: 9ac7cc55498e393885f1f55254784a0f1d245beb
+GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
+Copyright (C) 2007 Free Software Foundation, Inc.
 
-CLI evidence: 3.2.57(1)-release
-Real teardown/backend dispatch; fake adapters and orphan reaper; no live fleet.
+Modern Bash/Linux execution is not claimed; hosted CI owns that axis.
 
-$ FM_HOME=<fixture> bash bin/fm-teardown.sh td-child-missing-sibling --force
-Fixture condition: missing-sibling
-/var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T/fm-gotmp-tests.LW4oDS/td-child-missing-sibling/bin/backends/zellij.sh: line 2: /var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T/fm-gotmp-tests.LW4oDS/td-child-missing-sibling/bin/fm-backend-hometag-lib.sh: No such file or directory
-error: teardown of td-child-missing-sibling aborted before its task record was removed; every durable record is retained
-Observed retry exit status: 1
-Parent metadata: byte-identical; child metadata: byte-identical
-home-td-child-missing-sibling/work-note: parent work
-work-td-child-missing-sibling/work-note: child work
-fm-td-child-missing-sibling/gotmp/artifact: parent scratch
-home-td-child-missing-sibling/tasktmp/gotmp/artifact: child scratch
-Child endpoint kill was not invoked.
+$ FM_HOME=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-rm-z2 /bin/bash /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-rm-z2/bin/fm-teardown.sh td-rm-z2 
+exit=0
+stdout:
+teardown td-rm-z2 complete (window fakeses:fm-td-rm-z2, worktree /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/nonexistent-worktree-td-rm-z2)
+Backlog: td-rm-z2 just finished (this home keeps no backlog at /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-rm-z2/data/backlog.md). Update /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-rm-z2/data/backlog.md - move td-rm-z2 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+stderr (saved original stderr included):
+/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-rm-z2/bin/fm-teardown.sh: line 3167: /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-rm-z2/bin/fm-home-summary-refresh.sh: No such file or directory
 
-$ FM_HOME=<fixture> bash bin/fm-teardown.sh td-child-missing-adapter --force
-Fixture condition: missing-adapter
-REFUSED: zellij adapter is unavailable for child child-z; forced teardown changed nothing
-Observed retry exit status: 1
-Parent metadata: byte-identical; child metadata: byte-identical
-home-td-child-missing-adapter/work-note: parent work
-work-td-child-missing-adapter/work-note: child work
-fm-td-child-missing-adapter/gotmp/artifact: parent scratch
-home-td-child-missing-adapter/tasktmp/gotmp/artifact: child scratch
-Child endpoint kill was not invoked.
+$ FM_HOME=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-replacement-z8 /bin/bash /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-replacement-z8/bin/fm-teardown.sh td-replacement-z8 
+exit=0
+stdout:
+teardown td-replacement-z8 complete (window fakeses:fm-td-replacement-z8, worktree /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/nonexistent-worktree-td-replacement-z8)
+Backlog: td-replacement-z8 just finished (this home keeps no backlog at /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-replacement-z8/data/backlog.md). Update /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-replacement-z8/data/backlog.md - move td-replacement-z8 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+stderr (saved original stderr included):
+/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-replacement-z8/bin/fm-teardown.sh: line 3167: /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-replacement-z8/bin/fm-home-summary-refresh.sh: No such file or directory
 
-$ FM_HOME=<fixture> bash bin/fm-teardown.sh td-child-zero-exit --force
-Fixture condition: zero-exit
-error: teardown of td-child-zero-exit aborted before its task record was removed; every durable record is retained
-Observed retry exit status: 1
-Parent metadata: byte-identical; child metadata: byte-identical
-home-td-child-zero-exit/work-note: parent work
-work-td-child-zero-exit/work-note: child work
-fm-td-child-zero-exit/gotmp/artifact: parent scratch
-home-td-child-zero-exit/tasktmp/gotmp/artifact: child scratch
-Child endpoint kill was not invoked.
+$ FM_HOME=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-absent-z3 /bin/bash /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-absent-z3/bin/fm-teardown.sh td-absent-z3 
+exit=0
+stdout:
+teardown td-absent-z3 complete (window fakeses:fm-td-absent-z3, worktree /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/nonexistent-worktree-td-absent-z3)
+Backlog: td-absent-z3 just finished (this home keeps no backlog at /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-absent-z3/data/backlog.md). Update /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-absent-z3/data/backlog.md - move td-absent-z3 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+stderr (saved original stderr included):
+/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-absent-z3/bin/fm-teardown.sh: line 3167: /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-absent-z3/bin/fm-home-summary-refresh.sh: No such file or directory
 
-$ FM_HOME=<fixture> bash bin/fm-teardown.sh td-child-kill-failure --force
-Fixture condition: kill-failure
-teardown td-child-kill-failure complete (window fakeses:fm-td-child-kill-failure, worktree /var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/home-td-child-kill-failure)
-/var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/td-child-kill-failure/bin/fm-teardown.sh: line 3022: /var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T/fm-gotmp-tests.LW4oDS/td-child-kill-failure/bin/fm-home-summary-refresh.sh: No such file or directory
-Removed: td-child-kill-failure/state/td-child-kill-failure.meta
-Removed: home-td-child-kill-failure
-Removed: work-td-child-kill-failure
-Removed: fm-td-child-kill-failure
-Child kill received owning home twice, target, tab, label:
-/var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/home-td-child-kill-failure
-/var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/home-td-child-kill-failure
-fakeses:1
-1
-fm-child-z
+$ FM_HOME=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-missing-z4 /bin/bash /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-missing-z4/bin/fm-teardown.sh td-missing-z4 
+exit=0
+stdout:
+teardown td-missing-z4 complete (window fakeses:fm-td-missing-z4, worktree /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/nonexistent-worktree-td-missing-z4)
+Backlog: td-missing-z4 just finished (this home keeps no backlog at /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-missing-z4/data/backlog.md). Update /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-missing-z4/data/backlog.md - move td-missing-z4 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+stderr (saved original stderr included):
+/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-missing-z4/bin/fm-teardown.sh: line 3167: /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-missing-z4/bin/fm-home-summary-refresh.sh: No such file or directory
 
-$ FM_HOME=<fixture> bash bin/fm-teardown.sh td-child-success --force
-Fixture condition: success
-teardown td-child-success complete (window fakeses:fm-td-child-success, worktree /var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/home-td-child-success)
-/var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/td-child-success/bin/fm-teardown.sh: line 3022: /var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T/fm-gotmp-tests.LW4oDS/td-child-success/bin/fm-home-summary-refresh.sh: No such file or directory
-Removed: td-child-success/state/td-child-success.meta
-Removed: home-td-child-success
-Removed: work-td-child-success
-Removed: fm-td-child-success
-Child kill received owning home twice, target, tab, label:
-/var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/home-td-child-success
-/var/folders/l2/8bl68tbn4_17pyh37n64gjrc0000gn/T//fm-gotmp-tests.LW4oDS/home-td-child-success
-fakeses:1
-1
-fm-child-z
+$ FM_HOME=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-nosib-z5 /bin/bash /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-nosib-z5/bin/fm-teardown.sh td-nosib-z5 
+exit=1
+stdout:
+stderr (saved original stderr included):
+error: teardown of td-nosib-z5 aborted before its task record was removed; every durable record is retained
 
-Original stderr survives the best-effort kill redirection:
+$ FM_HOME=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-zero-z6 /bin/bash /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-zero-z6/bin/fm-teardown.sh td-zero-z6 
+exit=1
+stdout:
+stderr (saved original stderr included):
 error: teardown of td-zero-z6 aborted before its task record was removed; every durable record is retained
 
-Missing and unreadable adapters return to the caller (Bash POSIX mode):
-missing adapter: source returned 1; caller emits REFUSED and continues
-unreadable adapter: source returned 1; caller emits REFUSED and continues
+$ FM_HOME=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-noadapter-z7 /bin/bash --posix -c $'\n    . "$1/bin/fm-backend.sh"\n    if fm_backend_source tmux; then exit 1; fi\n    printf "adapter refused\\n"\n  ' _ /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-noadapter-z7 
+exit=0
+stdout:
+adapter refused
+stderr (saved original stderr included):
 
-Before/after reproduction of zero-status abort using identical fixture:
-base exit status: 0
-Metadata byte-identical; scratch retained.
-target exit status: 1
-error: teardown of evidence-before-after aborted before its task record was removed; every durable record is retained
-Metadata byte-identical; scratch retained.
+$ FM_HOME=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-missing-sibling /bin/bash /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-missing-sibling/bin/fm-teardown.sh td-child-missing-sibling --force 
+exit=1
+stdout:
+stderr (saved original stderr included):
+/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-missing-sibling/bin/backends/zellij.sh: line 2: /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-missing-sibling/bin/fm-backend-hometag-lib.sh: No such file or directory
+error: teardown of td-child-missing-sibling aborted before its task record was removed; every durable record is retained
 
-Pre-fix forced mixed-backend regression (expected test failure):
-not ok - missing-sibling: forced parent teardown accepted child adapter failure
-Pre-fix regression exit status: 1 (failure reproduced).
+$ FM_HOME=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-missing-adapter /bin/bash /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-missing-adapter/bin/fm-teardown.sh td-child-missing-adapter --force 
+exit=1
+stdout:
+stderr (saved original stderr included):
+REFUSED: zellij adapter is unavailable for child child-z; forced teardown changed nothing
 
-Current target: all asserted CLI and state contracts satisfied on Bash 3.2.
-Linux/modern Bash remains owned by hosted CI; not exercised locally.
+$ FM_HOME=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-zero-exit /bin/bash /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-zero-exit/bin/fm-teardown.sh td-child-zero-exit --force 
+exit=1
+stdout:
+stderr (saved original stderr included):
+error: teardown of td-child-zero-exit aborted before its task record was removed; every durable record is retained
+
+$ FM_HOME=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-kill-failure /bin/bash /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-kill-failure/bin/fm-teardown.sh td-child-kill-failure --force 
+exit=0
+stdout:
+teardown td-child-kill-failure complete (window fakeses:fm-td-child-kill-failure, worktree /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/home-td-child-kill-failure)
+stderr (saved original stderr included):
+/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-kill-failure/bin/fm-teardown.sh: line 3167: /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-kill-failure/bin/fm-home-summary-refresh.sh: No such file or directory
+
+$ FM_HOME=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-success /bin/bash /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-success/bin/fm-teardown.sh td-child-success --force 
+exit=0
+stdout:
+teardown td-child-success complete (window fakeses:fm-td-child-success, worktree /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/home-td-child-success)
+stderr (saved original stderr included):
+/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-success/bin/fm-teardown.sh: line 3167: /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-child-success/bin/fm-home-summary-refresh.sh: No such file or directory
+
+PERSISTED STATE AFTER CURRENT-HEAD INTERFACE CASES
+Replacement metadata retained after original cleanup:
+window=fakeses:fm-td-replacement-z8
+worktree=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/nonexistent-worktree-td-replacement-z8
+project=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/nonexistent-project-td-replacement-z8
+harness=claude
+kind=ship
+mode=no-mistakes
+yolo=off
+tasktmp=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/fm-td-replacement-z8
+spawn_gen=replacement
+
+Forced parent / child failure=missing-sibling
+Parent and child metadata: byte-identical to before teardown
+parent work
+child work
+parent scratch
+child scratch
+Child endpoint kill: not invoked
+
+Forced parent / child failure=missing-adapter
+Parent and child metadata: byte-identical to before teardown
+parent work
+child work
+parent scratch
+child scratch
+Child endpoint kill: not invoked
+
+Forced parent / child failure=zero-exit
+Parent and child metadata: byte-identical to before teardown
+parent work
+child work
+parent scratch
+child scratch
+Child endpoint kill: not invoked
+
+$ FM_HOME=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-unreadable /bin/bash --posix -c $'\n  . "$1/bin/fm-backend.sh"\n  if fm_backend_source tmux; then exit 1; fi\n  printf "unreadable adapter refused by caller\\n"\n' _ /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/fm-gotmp-tests.lrEo0a/td-unreadable 
+exit=0
+stdout:
+unreadable adapter refused by caller
+stderr (saved original stderr included):
+
+BEFORE-FIX NEGATIVE CONTROL: replacement
+
+$ FM_HOME=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/before-replacement.4ScDne/td-replacement-z8 /bin/bash /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/before-replacement.4ScDne/td-replacement-z8/bin/fm-teardown.sh td-replacement-z8 
+exit=1
+stdout:
+teardown td-replacement-z8 complete (window fakeses:fm-td-replacement-z8, worktree /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/before-replacement.4ScDne/nonexistent-worktree-td-replacement-z8)
+Backlog: td-replacement-z8 just finished (this home keeps no backlog at /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/before-replacement.4ScDne/td-replacement-z8/data/backlog.md). Update /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/before-replacement.4ScDne/td-replacement-z8/data/backlog.md - move td-replacement-z8 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+stderr (saved original stderr included):
+/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/before-replacement.4ScDne/td-replacement-z8/bin/fm-teardown.sh: line 3164: /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/before-replacement.4ScDne/td-replacement-z8/bin/fm-home-summary-refresh.sh: No such file or directory
+error: teardown of td-replacement-z8 aborted before its task record was removed; every durable record is retained
+/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/before-replacement.4ScDne/td-replacement-z8/bin/fm-teardown.sh: line 3164: /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/before-replacement.4ScDne/td-replacement-z8/bin/fm-home-summary-refresh.sh: No such file or directory
+error: teardown of td-replacement-z8 aborted before its task record was removed; every durable record is retained
+not ok - teardown rejected replacement metadata after successful cleanup
+Regression assertion exit=1 (expected nonzero before fix)
+
+BEFORE-FIX NEGATIVE CONTROL: abort
+
+$ FM_HOME=/Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/before-abort.QNX1xo/td-zero-z6 /bin/bash /Users/kuannnn/.no-mistakes/worktrees/2eb48a818687/01M1SSYMJXN442GWS2CHEEYZWE/.teardown-evidence-n5brliya/before-abort.QNX1xo/td-zero-z6/bin/fm-teardown.sh td-zero-z6 
+exit=0
+stdout:
+stderr (saved original stderr included):
+not ok - teardown accepted an exit 0 before cleanup
+Regression assertion exit=1 (expected nonzero before fix)
