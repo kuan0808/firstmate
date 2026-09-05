@@ -5,10 +5,10 @@
 #   fm-backlog-receive.sh state/handoff/<secondmate-id>.outbox.md <bytes> <sha256> <generation>
 #
 # The delivered file must be a non-symlink backlog-format scratch file confined
-# to FM_HOME/state/handoff. Every item must be Queued. Keys already present in
-# data/backlog.md are skipped; every remaining key moves in one dependency-closed
-# `tasks-axi mv` transaction under tasks-axi's own locks. On an ambiguous caller
-# retry, destination-present classification makes this operation idempotent.
+# to FM_HOME/state/handoff; it may contain no items. Every item must be Queued.
+# Keys already present in data/backlog.md are skipped; every remaining key moves
+# in one dependency-closed `tasks-axi mv` transaction under tasks-axi's own locks.
+# On an ambiguous caller retry, destination-present classification is idempotent.
 #
 # If tasks-axi reports a lock failure, this host may remove and retry once only
 # for its own backlog or delivered lock whose pid is dead and whose mtime is at
